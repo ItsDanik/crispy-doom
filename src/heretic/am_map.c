@@ -247,7 +247,7 @@ void AM_activateNewScale(void)
 {
     m_x += m_w / 2;
     m_y += m_h / 2;
-    m_w = FTOM(f_w);
+    m_w = FTOM(f_w >> AM_XSHIFT);
     m_h = FTOM(f_h);
     m_x -= m_w / 2;
     m_y -= m_h / 2;
@@ -286,7 +286,7 @@ void AM_restoreScaleAndLoc(void)
     next_m_y = prev_m_y = m_y; // [crispy]
 
     // Change the scaling multipliers
-    scale_mtof = FixedDiv(f_w << FRACBITS, m_w);
+    scale_mtof = FixedDiv((f_w >> AM_XSHIFT) << FRACBITS, m_w);
     scale_ftom = FixedDiv(FRACUNIT, scale_mtof);
 }
 
@@ -334,7 +334,7 @@ void AM_findMinMaxBoundaries(void)
     min_w = 2 * MAPPLAYERRADIUS;
     min_h = 2 * MAPPLAYERRADIUS;
 
-    a = FixedDiv(f_w << FRACBITS, max_w);
+    a = FixedDiv((f_w >> AM_XSHIFT) << FRACBITS, max_w);
     b = FixedDiv(f_h << FRACBITS, max_h);
     min_scale_mtof = a < b ? a : b;
 
@@ -371,7 +371,7 @@ static void AM_changeWindowLocTick(void)
     if (!crispy->automaprotate)
     {
         if (incx)
-            next_mapxstart += MTOF(incx+MAPUNIT/2);
+            next_mapxstart += MTOFX(incx+MAPUNIT/2);
         if (incy)
             next_mapystart -= MTOF(incy+MAPUNIT/2);
     }
@@ -439,7 +439,7 @@ void AM_changeWindowLoc(void)
     // nauseating.
     if (!crispy->automaprotate)
     {
-        mapxstart = incx ? prev_mapxstart + MTOF(incx + MAPUNIT/2) : mapxstart;
+        mapxstart = incx ? prev_mapxstart + MTOFX(incx + MAPUNIT/2) : mapxstart;
         mapystart = incy ? prev_mapystart - MTOF(incy + MAPUNIT/2) : mapystart;
     }
 
@@ -488,6 +488,21 @@ static void AM_CheatRevealMap(void)
 {
     cheating = (cheating + 1) % 3;
 }
+
+#ifdef MISTER_HYBRID
+void AM_MiSTerFullMap(void)
+{
+    if (!crispy->singleplayer)
+    {
+        return;
+    }
+    AM_CheatRevealMap();
+    P_SetMessage(&players[displayplayer],
+                 cheating == 1 ? "FULL MAP ON" :
+                 cheating == 2 ? "FULL MAP AND THINGS ON" : "FULL MAP OFF",
+                 false);
+}
+#endif
 
 
 // [woof] center the automap around the lowest numbered unfound secret sector
@@ -610,7 +625,7 @@ void AM_initVariables(void)
     mtof_zoommul = FRACUNIT;
     mousewheelzoom = false; // [crispy]
 
-    m_w = FTOM(f_w);
+    m_w = FTOM(f_w >> AM_XSHIFT);
     m_h = FTOM(f_h);
 
     // find player to center on initially
@@ -716,6 +731,8 @@ void AM_LevelInit(boolean reinit)
 
     finit_width = SCREENWIDTH;
     finit_height = SCREENHEIGHT - (42 << crispy->hires);
+    if (SCREEN240)
+        finit_height = SCREENHEIGHT; // MiSTer: the status bar over it
     f_x = f_y = 0;
     f_w = finit_width;
     f_h = finit_height;
@@ -738,7 +755,7 @@ void AM_LevelInit(boolean reinit)
     {
     // [crispy] initialize zoomlevel on all maps so that a 4096 units
     // square map would just fit in (MAP01 is 3376x3648 units)
-    fixed_t a = FixedDiv(f_w, (max_w>>MAPBITS < 2048) ? 2*(max_w>>MAPBITS) : 4096);
+    fixed_t a = FixedDiv(f_w >> AM_XSHIFT, (max_w>>MAPBITS < 2048) ? 2*(max_w>>MAPBITS) : 4096);
     fixed_t b = FixedDiv(f_h, (max_h>>MAPBITS < 2048) ? 2*(max_h>>MAPBITS) : 4096);
     scale_mtof = FixedDiv(a < b ? a : b, (int) (0.7*MAPUNIT));
     }
@@ -1178,7 +1195,7 @@ void AM_clearFB(int color)
 
     if (followplayer && !paused)
     {
-        dmapx = (MTOF(plr->mo->x) >> FRACTOMAPBITS) - (MTOF(plr->mo->oldx) >> FRACTOMAPBITS);
+        dmapx = (MTOFX(plr->mo->x) >> FRACTOMAPBITS) - (MTOFX(plr->mo->oldx) >> FRACTOMAPBITS);
         dmapy = (MTOF(plr->mo->oldy) >> FRACTOMAPBITS) - (MTOF(plr->mo->y) >> FRACTOMAPBITS);
 
 //              if(f_oldloc.x == INT_MAX) //to eliminate an error when the user first
@@ -2047,9 +2064,9 @@ void AM_drawMarks(void)
             {
                 AM_rotatePoint(&pt);
             }
-            fx = (CXMTOF(pt.x) >> crispy->hires) - 1;
+            fx = (CXMTOF(pt.x) >> hiresx) - 1;
             fy = (CYMTOF(pt.y) >> crispy->hires) - 2;
-            if (fx >= f_x && fx <= (f_w >> crispy->hires) - w && fy >= f_y && fy <= (f_h >> crispy->hires) - h)
+            if (fx >= f_x && fx <= (f_w >> hiresx) - w && fy >= f_y && fy <= (f_h >> crispy->hires) - h)
                 V_DrawPatch(fx - WIDESCREENDELTA, fy, marknums[i]);
         }
     }
@@ -2194,7 +2211,9 @@ void AM_Drawer(void)
     if (gameepisode <= numepisodes && gamemap < 10)
     {
         level_name = LevelNames[(gameepisode - 1) * 9 + gamemap - 1];
+        V_SetYMode(V_Y_HUD); // MiSTer: above the status bar
         MN_DrTextA(DEH_String(level_name), 20, 145);
+        V_SetYMode(V_Y_NONE);
     }
     SB_Translucent(false);
 //  I_Update();

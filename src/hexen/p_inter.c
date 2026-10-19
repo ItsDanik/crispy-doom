@@ -21,6 +21,9 @@
 #include "i_system.h"
 #include "p_local.h"
 #include "s_sound.h"
+#ifdef MISTER_HYBRID
+#include "mister/mister_port.h"
+#endif
 
 #define BONUSADD 6
 
@@ -1967,6 +1970,14 @@ void P_DamageMobj
         {                       // Try to use some inventory health
             P_AutoUseHealth(player, damage - player->health + 1);
         }
+#ifdef MISTER_HYBRID
+        // the OSD's Buddha: hurt down to 1, never killed
+        if (crispy->singleplayer && MiSTer_Option(MISTER_OSD_BUDDHA)
+            && damage >= player->health)
+        {
+            damage = player->health - 1;
+        }
+#endif
         player->health -= damage;       // mirror mobj health here for Dave
         if (player->health < 0)
         {
@@ -2184,6 +2195,14 @@ void P_PoisonDamage(player_t * player, mobj_t * source, int damage,
     {                           // Try to use some inventory health
         P_AutoUseHealth(player, damage - player->health + 1);
     }
+#ifdef MISTER_HYBRID
+    // the OSD's Buddha: hurt down to 1, never killed
+    if (crispy->singleplayer && MiSTer_Option(MISTER_OSD_BUDDHA)
+        && damage >= player->health)
+    {
+        damage = player->health - 1;
+    }
+#endif
     player->health -= damage;   // mirror mobj health here for Dave
     if (player->health < 0)
     {

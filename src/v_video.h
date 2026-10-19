@@ -83,6 +83,21 @@ void V_DrawBox(int x, int y, int w, int h, int c);
 
 void V_DrawFullscreenRawOrPatch(lumpindex_t index); // [crispy]
 void V_UseBuffer(pixel_t *buffer);
+
+#ifdef MISTER_HYBRID
+// MiSTer: where the graphics of the 320x200 layout go on the screen in 240
+// lines (SCREEN240): not moved (the default; the automap's marks, drawn in
+// the screen's rows), centred (menus, full-screen pictures) or, the HUD, at
+// the player's HUD margins (MiSTer_HudRows(), read at each call): what is in
+// the upper half at the top margin, the rest at the bottom one
+enum { V_Y_NONE, V_Y_CENTRE, V_Y_HUD };
+void V_SetYMode(int mode);
+// Rows to add to row y of the layout drawn on the screen
+int V_YDelta(int y);
+#else
+#define V_SetYMode(mode)
+#define V_YDelta(y) 0
+#endif
 void V_FillFlat(int y_start, int y_stop, int x_start, int x_stop,
                 const byte *src, pixel_t *dest);    // [crispy]
 

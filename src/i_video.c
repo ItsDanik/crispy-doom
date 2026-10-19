@@ -49,10 +49,14 @@
 #include "v_video.h"
 #include "w_wad.h"
 #include "z_zone.h"
+#ifdef MISTER_HYBRID
+#include "mister/mister_port.h"
+#endif
 
 int SCREENWIDTH, SCREENHEIGHT, SCREENHEIGHT_4_3;
 int NONWIDEWIDTH; // [crispy] non-widescreen SCREENWIDTH
 int WIDESCREENDELTA; // [crispy] horizontal widescreen offset
+int hiresx;
 
 // These are (1) the window (or the full screen) that our game is rendered to
 // and (2) the renderer that scales the texture (see below) into this window.
@@ -539,10 +543,16 @@ void I_StartTic (void)
         I_ReadMouse();
     }
 
+#ifdef MISTER_HYBRID
+    // every tic: the menus take presses (mister_joy_pressed) and repeat the
+    // directions themselves
+    I_UpdateJoystick();
+#else
     if (joywait < I_GetTime())
     {
         I_UpdateJoystick();
     }
+#endif
 }
 
 void I_UpdateFracTic(void) // [crispy]
@@ -777,6 +787,10 @@ void I_FinishUpdate (void)
     if (noblit)
         return;
 
+#ifdef MISTER_HYBRID
+    need_resize = false;
+#endif
+
     if (need_resize)
     {
         if (SDL_GetTicks() > last_resize_time + RESIZE_DELAY)
@@ -860,6 +874,26 @@ void I_FinishUpdate (void)
 
     // Draw disk icon before blit, if necessary.
     V_DrawDiskIcon();
+
+#ifdef MISTER_HYBRID
+    // The frame is in the window's surface already: to the core, and wait
+    // for the field it is shown in
+    if (palette_to_set)
+    {
+        SDL_SetPaletteColors(screenbuffer->format->palette, palette, 0, 256);
+        palette_to_set = false;
+    }
+
+    SDL_UpdateWindowSurface(screen);
+
+    if (!MiSTer_WaitFrame())
+    {
+        I_Quit(); // the core is gone
+    }
+
+    V_RestoreDiskBackground();
+    return;
+#endif
 
 #ifndef CRISPY_TRUECOLOR
     if (palette_to_set)
@@ -1465,12 +1499,54 @@ void I_GetWindowPosition(int *x, int *y, int w, int h)
     }
 }
 
+#ifdef MISTER_HYBRID
+// MiSTer hybrid core: the window is the core's picture, its size the video
+// mode. The 8-bit screen buffer is the window's surface, whose palette the
+// FPGA looks up: no renderer, no textures.
+static void MiSTer_SetVideoMode(void)
+{
+    SDL_SetHint("SDL_MISTER_VIDEO_FORMAT", "INDEX8");
+
+    if (screen == NULL)
+    {
+        screen = SDL_CreateWindow(NULL, 0, 0, SCREENWIDTH, SCREENHEIGHT, 0);
+
+        if (screen == NULL)
+        {
+            I_Error("Error creating window for video startup: %s",
+            SDL_GetError());
+        }
+    }
+    else
+    {
+        SDL_SetWindowSize(screen, SCREENWIDTH, SCREENHEIGHT);
+    }
+
+    screenbuffer = SDL_GetWindowSurface(screen);
+
+    if (screenbuffer == NULL || screenbuffer->pitch != SCREENWIDTH)
+    {
+        I_Error("No %dx%d 8-bit screen: %s", SCREENWIDTH, SCREENHEIGHT,
+                SDL_GetError());
+    }
+
+    SDL_FillRect(screenbuffer, NULL, 0);
+    palette_to_set = true;
+    printf("I_InitGraphics: %dx%d on the MiSTer core\n", SCREENWIDTH, SCREENHEIGHT);
+}
+#endif
+
 static void SetVideoMode(void)
 {
     int w, h;
     int x, y;
     int window_flags = 0, renderer_flags = 0;
     SDL_DisplayMode mode;
+
+#ifdef MISTER_HYBRID
+    MiSTer_SetVideoMode();
+    return;
+#endif
 
     w = window_width;
     h = window_height;
@@ -1725,8 +1801,27 @@ void I_GetScreenDimensions (void)
 	int w = 16, h = 10;
 	int ah;
 
+#ifdef MISTER_HYBRID
+	// the OSD's Resolution instead; no widescreen mode in the core
+	crispy->hires = 0;
+	crispy->widescreen = 0;
+#endif
+
 	SCREENWIDTH = ORIGWIDTH << crispy->hires;
 	SCREENHEIGHT = ORIGHEIGHT << crispy->hires;
+	hiresx = crispy->hires;
+#ifdef MISTER_HYBRID
+	if (MiSTer_Option(MISTER_OSD_640))
+	{
+		hiresx = 1;
+		SCREENWIDTH = ORIGWIDTH << hiresx;
+	}
+	if (MiSTer_Option(MISTER_OSD_240))
+	{
+		SCREENHEIGHT = ORIGHEIGHT_4_3;
+	}
+	MiSTer_ShowHudOptions(SCREEN240);
+#endif
 
 	NONWIDEWIDTH = SCREENWIDTH;
 
@@ -1770,12 +1865,15 @@ void I_GetScreenDimensions (void)
 		SCREENWIDTH = MIN(SCREENWIDTH, MAXWIDTH);
 	}
 
-	WIDESCREENDELTA = ((SCREENWIDTH - NONWIDEWIDTH) >> crispy->hires) / 2;
+	WIDESCREENDELTA = ((SCREENWIDTH - NONWIDEWIDTH) >> hiresx) / 2;
 }
 
 // [crispy] calls native SDL vsync toggle
 void I_ToggleVsync (void)
 {
+#ifdef MISTER_HYBRID
+    return; // one frame per field, always
+#endif
 #if SDL_VERSION_ATLEAST(2, 0, 18)
     SDL_RenderSetVSync(renderer, crispy->vsync);
 #else
@@ -1904,6 +2002,21 @@ void I_InitGraphics(void)
 
 void I_ReInitGraphics (int reinit)
 {
+#ifdef MISTER_HYBRID
+	// the screen buffer is the window's surface, of the new mode
+	if (reinit & REINIT_FRAMEBUFFERS)
+	{
+		I_GetScreenDimensions();
+		blit_rect.w = SCREENWIDTH;
+		blit_rect.h = SCREENHEIGHT;
+		V_Init();
+		MiSTer_SetVideoMode();
+		I_VideoBuffer = screenbuffer->pixels;
+		V_RestoreBuffer();
+	}
+	return;
+#endif
+
 	// [crispy] re-set rendering resolution and re-create framebuffers
 	if (reinit & REINIT_FRAMEBUFFERS)
 	{

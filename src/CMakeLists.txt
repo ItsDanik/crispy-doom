@@ -132,6 +132,10 @@ set(GAME_SOURCE_FILES
 
 set(GAME_INCLUDE_DIRS "${CMAKE_CURRENT_BINARY_DIR}/../")
 
+if(MISTER_HYBRID)
+    list(APPEND GAME_SOURCE_FILES mister/mister_port.c mister/mister_port.h)
+endif()
+
 if(WIN32)
     list(APPEND GAME_SOURCE_FILES
          "../win32/win_opendir.c" "../win32/win_opendir.h")

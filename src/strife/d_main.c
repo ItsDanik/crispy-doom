@@ -72,6 +72,9 @@
 #include "wi_stuff.h"
 #include "st_stuff.h"
 #include "am_map.h"
+#ifdef MISTER_HYBRID
+#include "mister/mister_port.h"
+#endif
 #include "net_client.h"
 #include "net_dedicated.h"
 #include "net_query.h"
@@ -188,6 +191,28 @@ void D_ProcessEvents (void)
 
 
 
+#ifdef MISTER_HYBRID
+// MiSTer: the OSD's Resolution (I_GetScreenDimensions()), as
+// M_CrispyToggleHiresHook() changes the resolution
+extern void AM_LevelInit (boolean reinit);
+extern void AM_initVariables (void);
+extern void I_ReInitGraphics (int reinit);
+void EnableLoadingDisk(void);
+
+static void D_MiSTerResolution(void)
+{
+    I_ReInitGraphics(REINIT_FRAMEBUFFERS);
+    R_ExecuteSetViewSize();
+    R_FillBackScreen();
+    EnableLoadingDisk();
+    AM_LevelInit(true);
+    if (automapactive)
+    {
+        AM_initVariables();
+    }
+}
+#endif
+
 //
 // D_Display
 //  draw current display, possibly wiping it from the previous
@@ -222,6 +247,15 @@ void D_Display (void)
         return;                    // for comparative timing / profiling
 
     redrawsbar = false;
+
+#ifdef MISTER_HYBRID
+    // MiSTer: the OSD's "Resolution", while the game runs (after this frame)
+    if (!crispy->post_rendering_hook && (MiSTer_Option(MISTER_OSD_240) != SCREEN240 ||
+         MiSTer_Option(MISTER_OSD_640) != hiresx))
+    {
+        crispy->post_rendering_hook = D_MiSTerResolution;
+    }
+#endif
     
     if (crispy->uncapped)
     {
@@ -258,6 +292,15 @@ void D_Display (void)
     if (gamestate == GS_LEVEL && gametic)
         HU_Erase();
 
+#ifdef MISTER_HYBRID
+    // MiSTer: in 240 lines the full-screen pictures are centred
+    if (SCREEN240 && gamestate != GS_LEVEL)
+    {
+        V_DrawFilledBox(0, 0, SCREENWIDTH, SCREENHEIGHT, 0);
+        V_SetYMode(V_Y_CENTRE);
+    }
+#endif
+
     // do buffered drawing
     switch (gamestate)
     {
@@ -275,7 +318,8 @@ void D_Display (void)
         // haleyjd 08/29/10: [STRIFE] Always redraw sbar if menu is/was active
         if (menuactivestate || (inhelpscreensstate && !inhelpscreens))
             redrawsbar = true;              // just put away the help screen
-        ST_Drawer (viewheight == SCREENHEIGHT, redrawsbar );
+        if (!SCREEN240) // MiSTer: in 240 lines drawn over the view, below
+            ST_Drawer (viewheight == SCREENHEIGHT, redrawsbar );
         fullscreen = viewheight == SCREENHEIGHT;
         break;
       
@@ -297,6 +341,7 @@ void D_Display (void)
     default:
         break;
     }
+    V_SetYMode(V_Y_NONE);
     
     // draw buffered stuff to screen
     I_UpdateNoBlit ();
@@ -362,6 +407,11 @@ void D_Display (void)
             inhelpscreensstate = true;
         }
 
+        // MiSTer: in 240 lines the status bar is drawn over the view or the
+        // automap, the HUD at the HUD margins
+        V_SetYMode(V_Y_HUD);
+        if (SCREEN240)
+            ST_Drawer (screenblocks > 10, true);
         SB_Translucent(TRANSLUCENT_HUD && (!automapactive || crispy->automapoverlay));
         HU_Drawer ();
         if(ST_DrawExternal()) 
@@ -372,6 +422,7 @@ void D_Display (void)
             menuactivestate = 1;
         }
         SB_Translucent(false);
+        V_SetYMode(V_Y_NONE);
     }
 
     // [crispy] draw neither pause pic nor menu when taking a clean screenshot
@@ -386,6 +437,8 @@ void D_Display (void)
         return;
     }
 
+    V_SetYMode(V_Y_CENTRE);
+
     // draw pause pic
     if (paused)
     {
@@ -393,13 +446,14 @@ void D_Display (void)
             y = 4;
         else
             y = (viewwindowy >> crispy->hires)+4;
-        V_DrawPatchDirect((viewwindowx >> crispy->hires) + ((scaledviewwidth >> crispy->hires) - 68) / 2 - WIDESCREENDELTA, y,
+        V_DrawPatchDirect((viewwindowx >> hiresx) + ((scaledviewwidth >> hiresx) - 68) / 2 - WIDESCREENDELTA, y,
                           W_CacheLumpName (DEH_String("M_PAUSE"), PU_CACHE));
     }
 
 
     // menus go directly to the screen
     M_Drawer ();          // menu is drawn even on top of everything
+    V_SetYMode(V_Y_NONE);
     NetUpdate ();         // send out any new accumulation
 
 
@@ -438,7 +492,9 @@ void D_Display (void)
         done = wipe_ScreenWipe(wipe_ColorXForm
                                , 0, 0, SCREENWIDTH, SCREENHEIGHT, tics);
         I_UpdateNoBlit ();
+        V_SetYMode(V_Y_CENTRE);
         M_Drawer ();                            // menu is drawn even on top of wipes
+        V_SetYMode(V_Y_NONE);
         I_FinishUpdate ();                      // page flip or blit buffer
     } while (!done);
 
@@ -1321,7 +1377,7 @@ boolean D_PatchClipCallback(patch_t *patch, int x, int y)
 {
     // note that offsets were already accounted for in V_DrawPatch
     return (x >= 0 && y >= 0 
-            && x + SHORT(patch->width) <= (SCREENWIDTH >> crispy->hires)
+            && x + SHORT(patch->width) <= (SCREENWIDTH >> hiresx)
             && y + SHORT(patch->height) <= (SCREENHEIGHT >> crispy->hires));
 }
 
@@ -1856,6 +1912,10 @@ void D_DoomMain (void)
 
     // [crispy] show exit screen only if showing ENDOOM
     show_exitscreen = show_endoom;
+#ifdef MISTER_HYBRID
+    // no text mode on the MiSTer: the ENDSTRF screen has nowhere to go
+    show_endoom = 0;
+#endif
 
     // Save configuration at exit.
     I_AtExit(M_SaveDefaults, false);
@@ -2268,6 +2328,11 @@ void D_DoomMain (void)
     if(devparm) // [STRIFE]
         DEH_printf("I_Init: Setting up machine state.\n");
     I_CheckIsScreensaver();
+#ifdef MISTER_HYBRID
+    // the pad: the d-pad for the inventory and the objectives, Prev Weapon
+    // jumps
+    mister_dpad_actions = MISTER_DPAD_INVENTORY | MISTER_DPAD_JUMP | MISTER_DPAD_MISSION;
+#endif
     I_InitJoystick();
     D_IntroTick(); // [STRIFE]
 

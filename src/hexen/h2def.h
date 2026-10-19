@@ -1128,6 +1128,10 @@ extern boolean inventory;
 void SB_Init(void);
 void SB_SetClassData(void);
 boolean SB_Responder(event_t * event);
+#ifdef MISTER_HYBRID
+// the cheats of the core's OSD, every tic (MiSTer_Triggers())
+void SB_MiSTerCheats(int triggers);
+#endif
 void SB_Ticker(void);
 void SB_Drawer(void);
 void Draw_TeleportIcon(void);

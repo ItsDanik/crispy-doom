@@ -24,6 +24,9 @@
 #include "r_local.h"
 #include "v_trans.h" // [crispy] blending functions
 #include "a11y.h" // [crispy] A11Y
+#ifdef MISTER_HYBRID
+#include "mister/mister_port.h"
+#endif
 
 typedef struct
 {
@@ -67,6 +70,7 @@ This is not the same as the angle, which increases counter clockwise
 
 
 fixed_t pspritescale, pspriteiscale;
+fixed_t pspriteyscale, pspriteyiscale;
 
 lighttable_t **spritelights;
 
@@ -488,6 +492,8 @@ void R_DrawVisSprite(vissprite_t * vis, int x1, int x2)
     }
     
     dc_iscale = abs(vis->xiscale) >> detailshift;
+    if (projectiony != projection)
+        dc_iscale = FixedDiv(FRACUNIT, vis->scale); // MiSTer: vertical
     dc_texturemid = vis->texturemid;
     frac = vis->startfrac;
     spryscale = vis->scale;
@@ -498,7 +504,8 @@ void R_DrawVisSprite(vissprite_t * vis, int x1, int x2)
     if (vis->psprite)
     {
         dc_texturemid += FixedMul(((centery - viewheight / 2) << FRACBITS),
-                                  vis->xiscale);
+                                  projectiony != projection ?
+                                  pspriteyiscale >> detailshift : vis->xiscale);
         sprtopscreen += (viewheight / 2 - centery) << FRACBITS;
     }
 
@@ -550,6 +557,7 @@ void R_ProjectSprite(mobj_t * thing)
     fixed_t gxt, gyt;
     fixed_t tx, tz;
     fixed_t xscale;
+    fixed_t yscale; // MiSTer: vertical, projectiony
     int x1, x2;
     spritedef_t *sprdef;
     spriteframe_t *sprframe;
@@ -607,6 +615,7 @@ void R_ProjectSprite(mobj_t * thing)
     if (tz < MINZ)
         return;                 // thing is behind view plane
     xscale = FixedDiv(projection, tz);
+    yscale = projectiony == projection ? xscale : FixedDiv(projectiony, tz);
 
     gxt = -FixedMul(trx, viewsin);
     gyt = FixedMul(try, viewcos);
@@ -662,7 +671,7 @@ void R_ProjectSprite(mobj_t * thing)
     vis = R_NewVisSprite();
     vis->mobjflags = thing->flags;
     vis->psprite = false;
-    vis->scale = xscale << detailshift;
+    vis->scale = yscale << detailshift;
     vis->gx = interpx;
     vis->gy = interpy;
     vis->gz = interpz;
@@ -708,7 +717,7 @@ void R_ProjectSprite(mobj_t * thing)
         vis->colormap[0] = vis->colormap[1] = colormaps;      // full bright
     else
     {                           // diminished light
-        index = xscale >> (LIGHTSCALESHIFT - detailshift + crispy->hires);
+        index = xscale >> (LIGHTSCALESHIFT - detailshift + hiresx);
         if (index >= MAXLIGHTSCALE)
             index = MAXLIGHTSCALE - 1;
         // [crispy] brightmaps for select sprites
@@ -871,13 +880,13 @@ void R_DrawPSprite(pspdef_t * psp, int psyoffset, int translucent) // [crispy] y
     vis->texturemid =
         (BASEYCENTER << FRACBITS) + FRACUNIT / 4 - (psp->sy2 -
                                                     spritetopoffset[lump] + psyoffset);
-    if (viewheight == SCREENHEIGHT)
+    if (viewheight == SCREENHEIGHT && !(SCREEN240 && screenblocks <= 10))
     {
         vis->texturemid -= PSpriteSY[players[consoleplayer].readyweapon];
     }
     vis->x1 = x1 < 0 ? 0 : x1;
     vis->x2 = x2 >= viewwidth ? viewwidth - 1 : x2;
-    vis->scale = pspritescale << detailshift;
+    vis->scale = pspriteyscale << detailshift;
     if (flip)
     {
         vis->xiscale = -pspriteiscale;
@@ -965,6 +974,23 @@ void R_DrawPSprite(pspdef_t * psp, int psyoffset, int translucent) // [crispy] y
             pspr_interp = true;
         }
     }
+
+#ifdef MISTER_HYBRID
+    // MiSTer: in 240 lines the status bar is drawn over the view, where the
+    // HUD margin puts it: the weapon is raised to stand above it as over the
+    // original's status bar (whose view ends 79 rows of the weapon below
+    // their centre)
+    if (SCREEN240 && screenblocks <= 10)
+    {
+        int top, bottom;
+        fixed_t raise;
+
+        MiSTer_HudRows(SCREENHEIGHT, &top, &bottom);
+        raise = (viewheight / 2) * FRACUNIT + 79 * (pspriteyscale << detailshift)
+              - (bottom - 42) * FRACUNIT;
+        vis->texturemid += FixedMul(raise, pspriteyiscale) >> detailshift;
+    }
+#endif
 
     R_DrawVisSprite(vis, vis->x1, vis->x2);
 }

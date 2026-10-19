@@ -38,6 +38,9 @@
 #include "doomtype.h"
 #include "m_argv.h"
 #include "m_config.h"
+#ifdef MISTER_HYBRID
+#include "mister/mister_port.h"
+#endif
 #include "m_misc.h"
 #include "i_joystick.h"
 #include "i_sound.h"
@@ -274,7 +277,11 @@ void I_Quit (void)
 
     SDL_Quit();
 
+#ifdef MISTER_HYBRID
+    exit(MiSTer_ExitCode());
+#else
     exit(0);
+#endif
 }
 
 
@@ -348,6 +355,16 @@ void I_Error (const char *error, ...)
     }
 
     // abort();
+
+#ifdef MISTER_HYBRID
+    // on the core's picture, until the player leaves the core
+    {
+        char text[4 * 71 + 1];
+
+        M_snprintf(text, sizeof(text), "Crispy Doom stopped: %s", msgbuf);
+        MiSTer_ShowError(text);
+    }
+#endif
 
     SDL_Quit();
 

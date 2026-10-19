@@ -883,6 +883,10 @@ extern int playerkeys;
 void SB_Init(void);
 boolean SB_Responder(event_t * event);
 void SB_Ticker(void);
+#ifdef MISTER_HYBRID
+// the cheats of the core's OSD, every tic (MiSTer_Triggers())
+void SB_MiSTerCheats(int triggers);
+#endif
 void SB_Drawer(void);
 
 //-----------------

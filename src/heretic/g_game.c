@@ -38,6 +38,9 @@
 #include "deh_main.h" // [crispy] for demo footer
 #include "memio.h"
 #include "p_extsaveg.h" // [crispy] for extended savegame information
+#ifdef MISTER_HYBRID
+#include "mister/mister_port.h"
+#endif
 
 // Macros
 
@@ -1465,6 +1468,11 @@ void G_Ticker(void)
     int i, buf;
     ticcmd_t *cmd = NULL;
     extern boolean automapactive;
+
+#ifdef MISTER_HYBRID
+    // the cheats of the core's OSD (its triggers are taken at every tic)
+    SB_MiSTerCheats(MiSTer_Triggers());
+#endif
 
 //
 // do player reborns if needed

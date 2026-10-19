@@ -71,6 +71,39 @@ byte *xlatab = NULL;
 
 static pixel_t *dest_screen = NULL;
 
+#ifdef MISTER_HYBRID
+#include "mister/mister_port.h"
+
+static int y_mode = V_Y_NONE;
+static int hud_top, hud_bottom;
+
+void V_SetYMode(int mode)
+{
+    y_mode = mode;
+    if (mode == V_Y_HUD)
+    {
+        MiSTer_HudRows(SCREENHEIGHT, &hud_top, &hud_bottom);
+    }
+}
+
+int V_YDelta(int y)
+{
+    if (!SCREEN240 || dest_screen != I_VideoBuffer)
+    {
+        return 0;
+    }
+    switch (y_mode)
+    {
+        case V_Y_CENTRE:
+            return (SCREENHEIGHT - ORIGHEIGHT) / 2;
+        case V_Y_HUD:
+            return y < ORIGHEIGHT / 2 ? hud_top : hud_bottom - ORIGHEIGHT;
+        default:
+            return 0;
+    }
+}
+#endif
+
 int dirtybox[4]; 
 
 // haleyjd 08/28/10: clipping callback function for patches.
@@ -103,12 +136,13 @@ void V_CopyRect(int srcx, int srcy, pixel_t *source,
     pixel_t *src;
     pixel_t *dest;
  
-    srcx <<= crispy->hires;
+    srcx <<= hiresx;
     srcy <<= crispy->hires;
-    width <<= crispy->hires;
+    width <<= hiresx;
     height <<= crispy->hires;
-    destx <<= crispy->hires;
+    destx <<= hiresx;
     desty <<= crispy->hires;
+    desty += V_YDelta(desty);
 
 #ifdef RANGECHECK 
     if (srcx < 0
@@ -270,6 +304,7 @@ void V_DrawPatch(int x, int y, patch_t *patch)
     y -= SHORT(patch->topoffset);
     x -= SHORT(patch->leftoffset);
     x += WIDESCREENDELTA; // [crispy] horizontal widescreen offset
+    y += V_YDelta(y);
 
 /*
     // haleyjd 08/28/10: Strife needs silent error checking here.
@@ -365,7 +400,7 @@ void V_DrawPatch(int x, int y, patch_t *patch)
 
 void V_DrawPatchFullScreen(patch_t *patch, boolean flipped)
 {
-    int x = ((SCREENWIDTH >> crispy->hires) - SHORT(patch->width)) / 2 - WIDESCREENDELTA;
+    int x = ((SCREENWIDTH >> hiresx) - SHORT(patch->width)) / 2 - WIDESCREENDELTA;
     static int black = -1;
 
     patch->leftoffset = 0;
@@ -381,7 +416,7 @@ void V_DrawPatchFullScreen(patch_t *patch, boolean flipped)
     }
 
     // [crispy] fill pillarboxes in widescreen mode
-    if (SCREENWIDTH != NONWIDEWIDTH)
+    if (SCREENWIDTH != NONWIDEWIDTH || SCREEN240)
     {
         V_DrawFilledBox(0, 0, SCREENWIDTH, SCREENHEIGHT, black);
     }
@@ -415,6 +450,7 @@ void V_DrawPatchFlipped(int x, int y, patch_t *patch)
     y -= SHORT(patch->topoffset); 
     x -= SHORT(patch->leftoffset); 
     x += WIDESCREENDELTA; // [crispy] horizontal widescreen offset
+    y += V_YDelta(y);
 
 /*
     // haleyjd 08/28/10: Strife needs silent error checking here.
@@ -550,9 +586,10 @@ void V_DrawTLPatch(int x, int y, patch_t * patch)
     y -= SHORT(patch->topoffset);
     x -= SHORT(patch->leftoffset);
     x += WIDESCREENDELTA; // [crispy] horizontal widescreen offset
+    y += V_YDelta(y);
 
     if (x < 0
-     || x + SHORT(patch->width) > (SCREENWIDTH >> crispy->hires)
+     || x + SHORT(patch->width) > (SCREENWIDTH >> hiresx)
      || y < 0
      || y + SHORT(patch->height) > (SCREENHEIGHT >> crispy->hires))
     {
@@ -607,6 +644,7 @@ void V_DrawXlaPatch(int x, int y, patch_t * patch)
     y -= SHORT(patch->topoffset);
     x -= SHORT(patch->leftoffset);
     x += WIDESCREENDELTA; // [crispy] horizontal widescreen offset
+    y += V_YDelta(y);
 
 /*
     if(patchclip_callback)
@@ -664,9 +702,10 @@ void V_DrawAltTLPatch(int x, int y, patch_t * patch)
     y -= SHORT(patch->topoffset);
     x -= SHORT(patch->leftoffset);
     x += WIDESCREENDELTA; // [crispy] horizontal widescreen offset
+    y += V_YDelta(y);
 
     if (x < 0
-     || x + SHORT(patch->width) > (SCREENWIDTH >> crispy->hires)
+     || x + SHORT(patch->width) > (SCREENWIDTH >> hiresx)
      || y < 0
      || y + SHORT(patch->height) > (SCREENHEIGHT >> crispy->hires))
     {
@@ -724,9 +763,10 @@ void V_DrawShadowedPatch(int x, int y, patch_t *patch)
     y -= SHORT(patch->topoffset);
     x -= SHORT(patch->leftoffset);
     x += WIDESCREENDELTA; // [crispy] horizontal widescreen offset
+    y += V_YDelta(y);
 
     if (x < 0
-     || x + SHORT(patch->width) > (SCREENWIDTH >> crispy->hires)
+     || x + SHORT(patch->width) > (SCREENWIDTH >> hiresx)
      || y < 0
      || y + SHORT(patch->height) > (SCREENHEIGHT >> crispy->hires))
     {
@@ -823,9 +863,9 @@ void V_DrawScaledBlock(int x, int y, int width, int height, byte *src)
     pixel_t *dest;
     int i, j;
 
-    const int rx = (x + WIDESCREENDELTA) << crispy->hires;
-    const int ry = y << crispy->hires;
-    const int rw = width << crispy->hires;
+    const int rx = (x + WIDESCREENDELTA) << hiresx;
+    const int ry = (y + V_YDelta(y)) << crispy->hires;
+    const int rw = width << hiresx;
     const int rh = height << crispy->hires;
 
     int dx0 = rx;
@@ -874,7 +914,7 @@ void V_DrawScaledBlock(int x, int y, int width, int height, byte *src)
 
         for (j = 0; j < dw; ++j)
         {
-            const int src_x = (j + xoff) >> crispy->hires;
+            const int src_x = (j + xoff) >> hiresx;
 #ifndef CRISPY_TRUECOLOR
             dest[i * SCREENWIDTH + j] = src_row[src_x];
 #else
@@ -946,14 +986,14 @@ void V_DrawBox(int x, int y, int w, int h, int c)
 static void V_DrawRawScreen(byte *raw, int size)
 {
     int width = size / ORIGHEIGHT;
-    int x = ((SCREENWIDTH >> crispy->hires) - width) / 2 - WIDESCREENDELTA;
+    int x = ((SCREENWIDTH >> hiresx) - width) / 2 - WIDESCREENDELTA;
 
     // [crispy] pillar boxing
     if (SCREENWIDTH != NONWIDEWIDTH)
     {
-        V_DrawFilledBox(0, 0, WIDESCREENDELTA << crispy->hires, SCREENHEIGHT, 0);
-        V_DrawFilledBox(SCREENWIDTH - (WIDESCREENDELTA << crispy->hires), 0,
-                        WIDESCREENDELTA << crispy->hires, SCREENHEIGHT, 0);
+        V_DrawFilledBox(0, 0, WIDESCREENDELTA << hiresx, SCREENHEIGHT, 0);
+        V_DrawFilledBox(SCREENWIDTH - (WIDESCREENDELTA << hiresx), 0,
+                        WIDESCREENDELTA << hiresx, SCREENHEIGHT, 0);
     }
 
     V_DrawScaledBlock(x, 0, width, ORIGHEIGHT, raw);
@@ -988,15 +1028,17 @@ void V_FillFlat(int y_start, int y_stop, int x_start, int x_stop,
                 const byte *src, pixel_t *dest)
 {
     int x, y;
+    // MiSTer: each texel twice across in 640x200 and 640x240
+    const int xshift = hiresx - crispy->hires;
 
     for (y = y_start; y < y_stop; y++)
     {
         for (x = x_start; x < x_stop; x++)
         {
 #ifndef CRISPY_TRUECOLOR
-            *dest++ = src[((y & 63) * 64) + (x & 63)];
+            *dest++ = src[((y & 63) * 64) + ((x >> xshift) & 63)];
 #else
-            *dest++ = pal_color[src[((y & 63) * 64) + (x & 63)]];
+            *dest++ = pal_color[src[((y & 63) * 64) + ((x >> xshift) & 63)]];
 #endif
         }
     }
@@ -1010,10 +1052,13 @@ void V_Init (void)
     // [crispy] initialize resolution-agnostic patch drawing
     if (NONWIDEWIDTH && SCREENHEIGHT)
     {
+        // MiSTer: unscaled in 240 lines (V_SetYMode())
+        const int height = SCREEN240 ? ORIGHEIGHT : SCREENHEIGHT;
+
         dx = (NONWIDEWIDTH << FRACBITS) / ORIGWIDTH;
         dxi = (ORIGWIDTH << FRACBITS) / NONWIDEWIDTH;
-        dy = (SCREENHEIGHT << FRACBITS) / ORIGHEIGHT;
-        dyi = (ORIGHEIGHT << FRACBITS) / SCREENHEIGHT;
+        dy = (height << FRACBITS) / ORIGHEIGHT;
+        dyi = (ORIGHEIGHT << FRACBITS) / height;
     }
     // no-op!
     // There used to be separate screens that could be drawn to; these are

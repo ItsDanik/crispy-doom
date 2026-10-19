@@ -69,6 +69,9 @@
 #include "wi_stuff.h"
 #include "st_stuff.h"
 #include "am_map.h"
+#ifdef MISTER_HYBRID
+#include "mister/mister_port.h"
+#endif
 #include "net_client.h"
 #include "net_dedicated.h"
 #include "net_query.h"
@@ -164,6 +167,9 @@ void D_ProcessEvents (void)
 // wipegamestate can be set to -1 to force a wipe on the next draw
 gamestate_t     wipegamestate = GS_DEMOSCREEN;
 
+// MiSTer: the whole status bar again after the resolution changed
+static boolean redrawsbar_mister;
+
 boolean D_Display (void)
 {
     static  boolean		viewactivestate = false;
@@ -212,6 +218,15 @@ boolean D_Display (void)
     if (gamestate == GS_LEVEL && gametic)
 	HU_Erase();
     
+#ifdef MISTER_HYBRID
+    // MiSTer: in 240 lines the full-screen pictures are centred
+    if (SCREEN240 && gamestate != GS_LEVEL)
+    {
+	V_DrawFilledBox(0, 0, SCREENWIDTH, SCREENHEIGHT, 0);
+	V_SetYMode(V_Y_CENTRE);
+    }
+#endif
+
     // do buffered drawing
     switch (gamestate)
     {
@@ -228,7 +243,11 @@ boolean D_Display (void)
 	    redrawsbar = true;
 	if (inhelpscreensstate && !inhelpscreens)
 	    redrawsbar = true;              // just put away the help screen
-	ST_Drawer (viewheight == SCREENHEIGHT, redrawsbar );
+	if (redrawsbar_mister)
+	    redrawsbar = true;
+	redrawsbar_mister = false;
+	if (!SCREEN240) // MiSTer: in 240 lines drawn over the view, below
+	    ST_Drawer (viewheight == SCREENHEIGHT, redrawsbar );
 	fullscreen = viewheight == SCREENHEIGHT;
 	break;
 
@@ -244,6 +263,7 @@ boolean D_Display (void)
 	D_PageDrawer ();
 	break;
     }
+    V_SetYMode(V_Y_NONE);
     
     // draw buffered stuff to screen
     I_UpdateNoBlit ();
@@ -254,14 +274,30 @@ boolean D_Display (void)
 	R_RenderPlayerView (&players[displayplayer]);
 
         // [crispy] Crispy HUD
-        if (screenblocks >= CRISPY_HUD)
+        if (screenblocks >= CRISPY_HUD && !SCREEN240)
             ST_Drawer(false, true);
     }
+
+#ifdef MISTER_HYBRID
+    // MiSTer: in 240 lines the status bar (or Crispy's HUD) is drawn over
+    // the view or the automap, at the HUD margin, every frame
+    if (SCREEN240 && gamestate == GS_LEVEL && gametic &&
+        (screenblocks != 11 || (automapactive && !crispy->automapoverlay)))
+    {
+	V_SetYMode(V_Y_HUD);
+	ST_Drawer(false, true);
+	V_SetYMode(V_Y_NONE);
+    }
+#endif
 
     // [crispy] in automap overlay mode,
     // the HUD is drawn on top of everything else
     if (gamestate == GS_LEVEL && gametic && !(automapactive && crispy->automapoverlay))
+    {
+	V_SetYMode(V_Y_HUD);
 	HU_Drawer ();
+	V_SetYMode(V_Y_NONE);
+    }
     
     // clean up border stuff
     if (gamestate != oldgamestate && gamestate != GS_LEVEL)
@@ -308,7 +344,9 @@ boolean D_Display (void)
     if (automapactive && crispy->automapoverlay)
     {
 	AM_Drawer ();
+	V_SetYMode(V_Y_HUD);
 	HU_Drawer ();
+	V_SetYMode(V_Y_NONE);
 
 	// [crispy] force redraw of status bar and border
 	viewactivestate = false;
@@ -331,6 +369,8 @@ boolean D_Display (void)
 	return false;
     }
 
+    V_SetYMode(V_Y_CENTRE);
+
     // draw pause pic
     if (paused)
     {
@@ -338,13 +378,14 @@ boolean D_Display (void)
 	    y = 4;
 	else
 	    y = (viewwindowy >> crispy->hires)+4;
-	V_DrawPatchDirect((viewwindowx >> crispy->hires) + ((scaledviewwidth >> crispy->hires) - 68) / 2 - WIDESCREENDELTA, y,
+	V_DrawPatchDirect((viewwindowx >> hiresx) + ((scaledviewwidth >> hiresx) - 68) / 2 - WIDESCREENDELTA, y,
                           W_CacheLumpName (DEH_String("M_PAUSE"), PU_CACHE));
     }
 
 
     // menus go directly to the screen
     M_Drawer ();          // menu is drawn even on top of everything
+    V_SetYMode(V_Y_NONE);
     NetUpdate ();         // send out any new accumulation
 
     return wipe;
@@ -519,6 +560,23 @@ boolean D_GrabMouseCallback(void)
     return (gamestate == GS_LEVEL) && !demoplayback && !advancedemo;
 }
 
+#ifdef MISTER_HYBRID
+// MiSTer: the OSD's Resolution (I_GetScreenDimensions()), as
+// M_CrispyToggleHiresHook() changes the resolution
+extern void AM_LevelInit (boolean reinit);
+extern void I_ReInitGraphics (int reinit);
+
+static void D_MiSTerResolution(void)
+{
+    I_ReInitGraphics(REINIT_FRAMEBUFFERS);
+    R_ExecuteSetViewSize();
+    R_FillBackScreen();
+    EnableLoadingDisk();
+    AM_LevelInit(true);
+    redrawsbar_mister = true;
+}
+#endif
+
 //
 //  D_RunFrame
 //
@@ -543,7 +601,9 @@ void D_RunFrame()
         wipe = !wipe_ScreenWipe(wipe_Melt
                                , 0, 0, SCREENWIDTH, SCREENHEIGHT, tics);
         I_UpdateNoBlit ();
+        V_SetYMode(V_Y_CENTRE);
         M_Drawer ();                            // menu is drawn even on top of wipes
+        V_SetYMode(V_Y_NONE);
         I_FinishUpdate ();                      // page flip or blit buffer
         return;
     }
@@ -573,6 +633,15 @@ void D_RunFrame()
             I_FinishUpdate ();              // page flip or blit buffer
         }
     }
+
+#ifdef MISTER_HYBRID
+	// MiSTer: the OSD's "Resolution", while the game runs
+	if (!crispy->post_rendering_hook && (MiSTer_Option(MISTER_OSD_240) != SCREEN240 ||
+	     MiSTer_Option(MISTER_OSD_640) != hiresx))
+	{
+		crispy->post_rendering_hook = D_MiSTerResolution;
+	}
+#endif
 
 	// [crispy] post-rendering function pointer to apply config changes
 	// that affect rendering and that are better applied after the current
@@ -2042,6 +2111,18 @@ void D_DoomMain (void)
     if (!M_ParmExists("-nosideload") && gamemode != shareware &&
         !demolumpname[0] && !M_CheckParmWithArgs("-record", 1))
     {
+#ifdef MISTER_HYBRID
+	// MiSTer: only the expansion of the game's menu entry, which has one of
+	// its own (SIGIL comes as a PWAD)
+	if (gamemission == doom2 && MiSTer_Expansion() == MISTER_EXP_NERVE)
+	{
+		D_LoadNerveWad();
+	}
+	if (gamemission == doom2 && MiSTer_Expansion() == MISTER_EXP_MASTER)
+	{
+		D_LoadMasterlevelsWad();
+	}
+#else
 	if (gamemode == retail &&
 	    gameversion == exe_ultimate &&
 	    gamevariant != freedoom &&
@@ -2055,6 +2136,7 @@ void D_DoomMain (void)
 		D_LoadNerveWad();
 		D_LoadMasterlevelsWad();
 	}
+#endif
     }
 
     // Load DEHACKED lumps from WAD files - but only if we give the right

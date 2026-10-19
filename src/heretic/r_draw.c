@@ -508,7 +508,7 @@ void R_DrawViewBorder(void)
     // [crispy] use unified flat filling function
     V_FillFlat(0, SCREENHEIGHT - SBARHEIGHT, 0, SCREENWIDTH, src, dest);
 
-    for (x = (viewwindowx >> crispy->hires); x < (viewwindowx + viewwidth) >> crispy->hires; x += 16)
+    for (x = (viewwindowx >> hiresx); x < (viewwindowx + viewwidth) >> hiresx; x += 16)
     {
         V_DrawPatch(x - WIDESCREENDELTA, (viewwindowy >> crispy->hires) - 4,
                     W_CacheLumpName(DEH_String("bordt"), PU_CACHE));
@@ -517,21 +517,21 @@ void R_DrawViewBorder(void)
     }
     for (y = (viewwindowy >> crispy->hires); y < (viewwindowy + viewheight) >> crispy->hires; y += 16)
     {
-        V_DrawPatch((viewwindowx >> crispy->hires) - 4 - WIDESCREENDELTA, y,
+        V_DrawPatch((viewwindowx >> hiresx) - 4 - WIDESCREENDELTA, y,
                     W_CacheLumpName(DEH_String("bordl"), PU_CACHE));
-        V_DrawPatch(((viewwindowx + viewwidth) >> crispy->hires) - WIDESCREENDELTA, y,
+        V_DrawPatch(((viewwindowx + viewwidth) >> hiresx) - WIDESCREENDELTA, y,
                     W_CacheLumpName(DEH_String("bordr"), PU_CACHE));
     }
-    V_DrawPatch((viewwindowx >> crispy->hires) - 4 - WIDESCREENDELTA,
+    V_DrawPatch((viewwindowx >> hiresx) - 4 - WIDESCREENDELTA,
                 (viewwindowy >> crispy->hires) - 4,
                 W_CacheLumpName(DEH_String("bordtl"), PU_CACHE));
-    V_DrawPatch(((viewwindowx + viewwidth) >> crispy->hires) - WIDESCREENDELTA,
+    V_DrawPatch(((viewwindowx + viewwidth) >> hiresx) - WIDESCREENDELTA,
                 (viewwindowy >> crispy->hires) - 4,
                 W_CacheLumpName(DEH_String("bordtr"), PU_CACHE));
-    V_DrawPatch(((viewwindowx + viewwidth) >> crispy->hires) - WIDESCREENDELTA,
+    V_DrawPatch(((viewwindowx + viewwidth) >> hiresx) - WIDESCREENDELTA,
                 (viewwindowy + viewheight) >> crispy->hires,
                 W_CacheLumpName(DEH_String("bordbr"), PU_CACHE));
-    V_DrawPatch((viewwindowx >> crispy->hires) - 4 - WIDESCREENDELTA,
+    V_DrawPatch((viewwindowx >> hiresx) - 4 - WIDESCREENDELTA,
                 (viewwindowy + viewheight) >> crispy->hires,
                 W_CacheLumpName(DEH_String("bordbl"), PU_CACHE));
 }
@@ -572,28 +572,28 @@ void R_DrawTopBorder(void)
     {
         int x;
 
-        for (x = (viewwindowx >> crispy->hires); x < (viewwindowx + viewwidth) >> crispy->hires; x += 16)
+        for (x = (viewwindowx >> hiresx); x < (viewwindowx + viewwidth) >> hiresx; x += 16)
         {
             V_DrawPatch(x - WIDESCREENDELTA, (viewwindowy >> crispy->hires) - 4,
                         W_CacheLumpName(DEH_String("bordt"), PU_CACHE));
         }
-        V_DrawPatch((viewwindowx >> crispy->hires) - 4 - WIDESCREENDELTA,
+        V_DrawPatch((viewwindowx >> hiresx) - 4 - WIDESCREENDELTA,
                     viewwindowy >> crispy->hires,
                     W_CacheLumpName(DEH_String("bordl"), PU_CACHE));
-        V_DrawPatch(((viewwindowx + viewwidth) >> crispy->hires) - WIDESCREENDELTA,
+        V_DrawPatch(((viewwindowx + viewwidth) >> hiresx) - WIDESCREENDELTA,
                     viewwindowy >> crispy->hires,
                     W_CacheLumpName(DEH_String("bordr"), PU_CACHE));
-        V_DrawPatch((viewwindowx >> crispy->hires) - 4 - WIDESCREENDELTA,
+        V_DrawPatch((viewwindowx >> hiresx) - 4 - WIDESCREENDELTA,
                     (viewwindowy >> crispy->hires) + 16,
                     W_CacheLumpName(DEH_String("bordl"), PU_CACHE));
-        V_DrawPatch(((viewwindowx + viewwidth) >> crispy->hires) - WIDESCREENDELTA,
+        V_DrawPatch(((viewwindowx + viewwidth) >> hiresx) - WIDESCREENDELTA,
                     (viewwindowy >> crispy->hires) + 16,
                     W_CacheLumpName(DEH_String("bordr"), PU_CACHE));
 
-        V_DrawPatch((viewwindowx >> crispy->hires) - 4 - WIDESCREENDELTA,
+        V_DrawPatch((viewwindowx >> hiresx) - 4 - WIDESCREENDELTA,
                     (viewwindowy >> crispy->hires) - 4,
                     W_CacheLumpName(DEH_String("bordtl"), PU_CACHE));
-        V_DrawPatch(((viewwindowx + viewwidth) >> crispy->hires) - WIDESCREENDELTA,
+        V_DrawPatch(((viewwindowx + viewwidth) >> hiresx) - WIDESCREENDELTA,
                     (viewwindowy >> crispy->hires) - 4,
                     W_CacheLumpName(DEH_String("bordtr"), PU_CACHE));
     }

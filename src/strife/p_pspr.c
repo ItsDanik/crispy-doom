@@ -34,6 +34,9 @@
 #include "sounds.h"
 
 #include "p_pspr.h"
+#ifdef MISTER_HYBRID
+#include "mister/mister_port.h"
+#endif
 
 #define LOWERSPEED		FRACUNIT*6
 #define RAISESPEED		FRACUNIT*6
@@ -42,6 +45,19 @@
 #define WEAPONTOP		32*FRACUNIT
 
 
+
+// A shot's ammo of the weapon the player has up (every weapon takes it here)
+static void DecreaseAmmo(player_t *player, int amount)
+{
+#ifdef MISTER_HYBRID
+    // the OSD's Infinite Ammo
+    if (crispy->singleplayer && MiSTer_Option(MISTER_OSD_INFINITE_AMMO))
+    {
+        return;
+    }
+#endif
+    player->ammo[weaponinfo[player->readyweapon].ammo] -= amount;
+}
 
 //
 // P_SetPsprite
@@ -492,7 +508,7 @@ void A_FireFlameThrower(player_t* player, pspdef_t* psp)
     int t;
 
     P_SetMobjState(player->mo, S_PLAY_06);
-    player->ammo[weaponinfo[player->readyweapon].ammo]--;
+    DecreaseAmmo(player, 1);
     t = P_Random();
     player->mo->angle += (t - P_Random()) << 18;
 
@@ -516,7 +532,7 @@ void A_FireMissile(player_t* player, pspdef_t* psp)
     t = P_Random();
     player->mo->angle += (t - P_Random()) << (19 - (player->accuracy * 5 / 100));
     P_SetMobjState(player->mo, S_PLAY_06);
-    player->ammo[weaponinfo[player->readyweapon].ammo]--;
+    DecreaseAmmo(player, 1);
     P_SpawnPlayerMissile(player->mo, MT_MINIMISSLE);
     player->mo->angle = an;
 }
@@ -530,7 +546,7 @@ void A_FireMauler2(player_t* player, pspdef_t* pspr)
 {
     P_SetMobjState(player->mo, S_PLAY_06);
     P_DamageMobj(player->mo, player->mo, NULL, 20);
-    player->ammo[weaponinfo[player->readyweapon].ammo] -= 30;
+    DecreaseAmmo(player, 30);
     P_SpawnPlayerMissile(player->mo, MT_TORPEDO);
     P_Thrust(player, player->mo->angle + ANG180, 512000);
 }
@@ -564,7 +580,7 @@ void A_FireGrenade(player_t* player, pspdef_t* pspr)
         fprintf(stderr, "Warning: A_FireGrenade used on wrong weapon!\n");
     }
 
-    player->ammo[weaponinfo[player->readyweapon].ammo]--;
+    DecreaseAmmo(player, 1);
 
     // set flash frame
     st1 = &states[(pspr->state - states) + weaponinfo[player->readyweapon].flashstate];
@@ -611,7 +627,7 @@ void A_FireElectricBolt(player_t* player, pspdef_t* pspr)
     // haleyjd 09/19/10: Use 5 mul on accuracy here as well
     t = P_Random();
     player->mo->angle += (t - P_Random()) << (18 - (player->accuracy * 5 / 100));
-    player->ammo[weaponinfo[player->readyweapon].ammo]--;
+    DecreaseAmmo(player, 1);
     P_SpawnPlayerMissile(player->mo, MT_ELECARROW);
     player->mo->angle = an;
     S_StartSound(player->so, sfx_xbow); // [crispy] weapon sound source
@@ -630,7 +646,7 @@ void A_FirePoisonBolt(player_t* player, pspdef_t* pspr)
     // haleyjd 09/19/10: Use 5 mul on accuracy here as well
     t = P_Random();
     player->mo->angle += (t - P_Random()) << (18 - (player->accuracy * 5 / 100));
-    player->ammo[weaponinfo[player->readyweapon].ammo]--;
+    DecreaseAmmo(player, 1);
     P_SpawnPlayerMissile(player->mo, MT_POISARROW);
     player->mo->angle = an;
     S_StartSound(player->so, sfx_xbow); // [crispy] weapon sound source
@@ -715,7 +731,7 @@ void A_FireRifle(player_t* player, pspdef_t* pspr)
     if(player->ammo[weaponinfo[player->readyweapon].ammo])
     {
         P_SetMobjState(player->mo, S_PLAY_06); // 293
-        player->ammo[weaponinfo[player->readyweapon].ammo]--;
+        DecreaseAmmo(player, 1);
         P_BulletSlope(player->mo);
         P_GunShot(player->mo, !player->refire);
     }
@@ -735,7 +751,7 @@ void A_FireMauler1(player_t* player, pspdef_t* pspr)
     // haleyjd 09/18/10: Corrected ammo check to use >=
     if(player->ammo[weaponinfo[player->readyweapon].ammo] >= 20)
     {
-        player->ammo[weaponinfo[player->readyweapon].ammo] -= 20;
+        DecreaseAmmo(player, 20);
         P_BulletSlope(player->mo);
         S_StartSound(player->so, sfx_pgrdat); // [crispy] weapon sound source
 

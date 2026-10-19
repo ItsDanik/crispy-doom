@@ -48,6 +48,9 @@
 #include "v_video.h"
 #include "am_map.h"
 #include "v_trans.h" // [crispy] dp_translation
+#ifdef MISTER_HYBRID
+#include "mister/mister_port.h"
+#endif
 
 #include "heretic_icon.c"
 
@@ -251,6 +254,11 @@ static void CrispyDrawStats (void)
 
 void D_Display(void)
 {
+#ifdef MISTER_HYBRID
+    // MiSTer: in 240 lines the full-screen pictures are centred
+    V_SetYMode(SCREEN240 && gamestate != GS_LEVEL ? V_Y_CENTRE : V_Y_NONE);
+#endif
+
     if (crispy->uncapped)
     {
         I_UpdateFracTic();
@@ -303,6 +311,8 @@ void D_Display(void)
             }
             // [crispy] check for translucent HUD
             SB_Translucent(TRANSLUCENT_HUD && (!automapactive || crispy->automapoverlay));
+            // MiSTer: in 240 lines at the HUD margins, over the view
+            V_SetYMode(V_Y_HUD);
             CT_Drawer();
             UpdateState |= I_FULLVIEW;
             SB_Drawer();
@@ -319,6 +329,18 @@ void D_Display(void)
             D_PageDrawer();
             break;
     }
+
+#ifdef MISTER_HYBRID
+    // MiSTer: in 240 lines the full-screen pictures are centred, black above
+    // and below (only the band: the end's scroll draws every third tic)
+    if (SCREEN240 && gamestate != GS_LEVEL)
+    {
+        const int band = (SCREENHEIGHT - ORIGHEIGHT) / 2;
+
+        V_DrawFilledBox(0, 0, SCREENWIDTH, band, 0);
+        V_DrawFilledBox(0, SCREENHEIGHT - band, SCREENWIDTH, band, 0);
+    }
+#endif
 
     if (testcontrols)
     {
@@ -350,7 +372,9 @@ void D_Display(void)
     SB_Translucent(false);
 
     // Menu drawing
+    V_SetYMode(V_Y_CENTRE);
     MN_Drawer();
+    V_SetYMode(V_Y_NONE);
 
     // Send out any new accumulation
     NetUpdate();
@@ -382,6 +406,27 @@ boolean D_GrabMouseCallback(void)
 // PROC D_DoomLoop
 //
 //---------------------------------------------------------------------------
+
+#ifdef MISTER_HYBRID
+// MiSTer: the OSD's Resolution (I_GetScreenDimensions()), as the Crispness
+// menu's hires toggle changes the resolution
+extern void I_ReInitGraphics(int reinit);
+extern void AM_LevelInit(boolean reinit);
+extern void AM_initVariables(void);
+
+static void D_MiSTerResolution(void)
+{
+    I_ReInitGraphics(REINIT_FRAMEBUFFERS);
+    R_ExecuteSetViewSize();
+    AM_LevelInit(true);
+    if (automapactive)
+    {
+        AM_initVariables();
+    }
+    SB_state = -1;
+    BorderNeedRefresh = true;
+}
+#endif
 
 void D_DoomLoop(void)
 {
@@ -443,6 +488,15 @@ void D_DoomLoop(void)
             oldgametic = gametic;
         }
         D_Display();
+
+#ifdef MISTER_HYBRID
+        // MiSTer: the OSD's "Resolution", while the game runs
+        if (!crispy->post_rendering_hook && (MiSTer_Option(MISTER_OSD_240) != SCREEN240 ||
+             MiSTer_Option(MISTER_OSD_640) != hiresx))
+        {
+            crispy->post_rendering_hook = D_MiSTerResolution;
+        }
+#endif
 
         // [crispy] post-rendering function pointer to apply config changes
         // that affect rendering and that are better applied after the current
@@ -1414,6 +1468,10 @@ void D_DoomMain(void)
 
     tprintf(DEH_String("I_Init: Setting up machine state.\n"), 1);
     I_CheckIsScreensaver();
+#ifdef MISTER_HYBRID
+    // the pad's d-pad for the inventory and flying
+    mister_dpad_actions = MISTER_DPAD_INVENTORY | MISTER_DPAD_FLY;
+#endif
     I_InitJoystick();
     IncThermo();
 

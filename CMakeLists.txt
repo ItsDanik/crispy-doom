@@ -55,7 +55,24 @@ else()
     add_compile_definitions(DISABLE_SDL2NET=1)
 endif()
 
+# The static SDL2_mixer and SDL2_net (of the MiSTer hybrid core) only have
+# the "-static" targets
+foreach(LIB SDL2_mixer SDL2_net)
+    if(TARGET ${LIB}::${LIB}-static AND NOT TARGET ${LIB}::${LIB})
+        add_library(${LIB}::${LIB} INTERFACE IMPORTED)
+        set_target_properties(${LIB}::${LIB} PROPERTIES
+                              INTERFACE_LINK_LIBRARIES ${LIB}::${LIB}-static)
+    endif()
+endforeach()
+
 option(CRISPY_TRUECOLOR "True color rendering" OFF)
+
+# MiSTer hybrid core: the game runs on the MiSTer's ARM, the FPGA core shows
+# its picture and plays its FM music (src/mister/, hybrid/ of the core)
+option(MISTER_HYBRID "Build for the MiSTer hybrid core (needs SDL2 with the MiSTer drivers)" OFF)
+if(MISTER_HYBRID)
+    add_compile_definitions(MISTER_HYBRID=1)
+endif()
 
 # Check for libsamplerate.
 find_package(SampleRate)

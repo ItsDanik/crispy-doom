@@ -36,6 +36,7 @@ lighttable_t *fixedcolormap;
 int centerx, centery;
 fixed_t centerxfrac, centeryfrac;
 fixed_t projection;
+fixed_t projectiony;
 
 int framecount;                 // just for profiling purposes
 
@@ -694,6 +695,17 @@ void R_ExecuteSetViewSize(void)
 
     setsizeneeded = false;
 
+#ifdef MISTER_HYBRID
+    // MiSTer: in 240 lines the view fills the screen whatever its size, the
+    // status bar drawn over it
+    if (SCREEN240)
+    {
+        scaledviewwidth_nonwide = NONWIDEWIDTH;
+        scaledviewwidth = SCREENWIDTH;
+        viewheight = SCREENHEIGHT;
+    }
+    else
+#endif
     if (setblocks == 11)
     {
         scaledviewwidth_nonwide = NONWIDEWIDTH;
@@ -702,13 +714,13 @@ void R_ExecuteSetViewSize(void)
     }
     else
     {
-        scaledviewwidth_nonwide = (setblocks * 32) << crispy->hires;
+        scaledviewwidth_nonwide = (setblocks * 32) << hiresx;
         viewheight = ((setblocks * 158 / 10)) << crispy->hires;
 
 	// [crispy] regular viewwidth in non-widescreen mode
 	if (crispy->widescreen)
 	{
-		const int widescreen_edge_aligner = (16 << crispy->hires) - 1;
+		const int widescreen_edge_aligner = (16 << hiresx) - 1;
 
 		scaledviewwidth = viewheight*SCREENWIDTH/(SCREENHEIGHT-(42<<crispy->hires));
 		// [crispy] make sure scaledviewwidth is an integer multiple of the bezel patch width
@@ -731,6 +743,11 @@ void R_ExecuteSetViewSize(void)
     centeryfrac = centery << FRACBITS;
     centerxfrac_nonwide = (viewwidth_nonwide / 2) << FRACBITS;
     projection = centerxfrac_nonwide;
+    // MiSTer: the y of the view as in 320x200, also with twice the pixels
+    // across, and 6/5 of that in 240 lines
+    projectiony = projection >> (hiresx - crispy->hires);
+    if (SCREEN240)
+        projectiony = projectiony / 5 * 6;
 
     if (!detailshift)
     {
@@ -756,6 +773,10 @@ void R_ExecuteSetViewSize(void)
 //
     pspritescale = FRACUNIT * viewwidth_nonwide / ORIGWIDTH;
     pspriteiscale = FRACUNIT * ORIGWIDTH / viewwidth_nonwide;
+    pspriteyscale = pspritescale >> (hiresx - crispy->hires);
+    if (SCREEN240)
+        pspriteyscale = pspriteyscale / 5 * 6;
+    pspriteyiscale = pspriteyscale == pspritescale ? pspriteiscale : FixedDiv(FRACUNIT, pspriteyscale);
 
 //
 // thing clipping
@@ -770,7 +791,7 @@ void R_ExecuteSetViewSize(void)
     {
         // [crispy] re-generate lookup-table for yslope[] (free look)
         // whenever "detailshift" or "screenblocks" change
-        const fixed_t num = (viewwidth_nonwide<<detailshift)/2*FRACUNIT;
+        const fixed_t num = projectiony<<detailshift;
         for (j = 0; j < LOOKDIRS; j++)
         {
         dy = ((i - (viewheight / 2 + ((j - LOOKDIRMIN) * (1 << crispy->hires)) *

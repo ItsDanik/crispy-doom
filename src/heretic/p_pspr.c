@@ -21,6 +21,9 @@
 #include "m_random.h"
 #include "p_local.h"
 #include "s_sound.h"
+#ifdef MISTER_HYBRID
+#include "mister/mister_port.h"
+#endif
 
 // Macros
 
@@ -40,6 +43,19 @@ static struct
 } MaceSpots[MAX_MACE_SPOTS];
 
 fixed_t bulletslope;
+
+// A shot's ammo (every weapon takes it here)
+static void TakeAmmo(player_t *player, ammotype_t ammo, int amount)
+{
+#ifdef MISTER_HYBRID
+    // the OSD's Infinite Ammo
+    if (crispy->singleplayer && MiSTer_Option(MISTER_OSD_INFINITE_AMMO))
+    {
+        return;
+    }
+#endif
+    player->ammo[ammo] -= amount;
+}
 
 static int WeaponAmmoUsePL1[NUMWEAPONS] = {
     0,                          // staff
@@ -953,7 +969,7 @@ void A_FireBlasterPL1(mobj_t *actor, player_t *player, pspdef_t *psp)
 
     mo = player->mo;
     S_StartSound(mo, sfx_gldhit);
-    player->ammo[am_blaster] -= USE_BLSR_AMMO_1;
+    TakeAmmo(player, am_blaster, USE_BLSR_AMMO_1);
     P_BulletSlope(mo);
     damage = HITDICE(4);
     angle = mo->angle;
@@ -976,8 +992,7 @@ void A_FireBlasterPL2(mobj_t *actor, player_t *player, pspdef_t *psp)
 {
     mobj_t *mo;
 
-    player->ammo[am_blaster] -=
-        deathmatch ? USE_BLSR_AMMO_1 : USE_BLSR_AMMO_2;
+    TakeAmmo(player, am_blaster, deathmatch ? USE_BLSR_AMMO_1 : USE_BLSR_AMMO_2);
     mo = P_SpawnPlayerMissile(player->mo, MT_BLASTERFX1);
     if (mo)
     {
@@ -999,7 +1014,7 @@ void A_FireGoldWandPL1(mobj_t *actor, player_t *player, pspdef_t *psp)
     int damage;
 
     mo = player->mo;
-    player->ammo[am_goldwand] -= USE_GWND_AMMO_1;
+    TakeAmmo(player, am_goldwand, USE_GWND_AMMO_1);
     P_BulletSlope(mo);
     damage = 7 + (P_Random() & 7);
     angle = mo->angle;
@@ -1027,8 +1042,7 @@ void A_FireGoldWandPL2(mobj_t *actor, player_t *player, pspdef_t *psp)
     fixed_t momz;
 
     mo = player->mo;
-    player->ammo[am_goldwand] -=
-        deathmatch ? USE_GWND_AMMO_1 : USE_GWND_AMMO_2;
+    TakeAmmo(player, am_goldwand, deathmatch ? USE_GWND_AMMO_1 : USE_GWND_AMMO_2);
     PuffType = MT_GOLDWANDPUFF2;
     P_BulletSlope(mo);
     momz = FixedMul(mobjinfo[MT_GOLDWANDFX2].speed, bulletslope);
@@ -1060,7 +1074,7 @@ void A_FireMacePL1B(mobj_t *actor, player_t *player, pspdef_t *psp)
     {
         return;
     }
-    player->ammo[am_mace] -= USE_MACE_AMMO_1;
+    TakeAmmo(player, am_mace, USE_MACE_AMMO_1);
     pmo = player->mo;
 
     // Vanilla bug here:
@@ -1106,7 +1120,7 @@ void A_FireMacePL1(mobj_t *mobj, player_t * player, pspdef_t * psp)
     {
         return;
     }
-    player->ammo[am_mace] -= USE_MACE_AMMO_1;
+    TakeAmmo(player, am_mace, USE_MACE_AMMO_1);
     psp->sx = ((P_Random() & 3) - 2) * FRACUNIT;
     psp->sy = WEAPONTOP + (P_Random() & 3) * FRACUNIT;
     ball = P_SPMAngle(player->mo, MT_MACEFX1, player->mo->angle
@@ -1237,7 +1251,7 @@ void A_FireMacePL2(mobj_t *actor, player_t *player, pspdef_t *psp)
 {
     mobj_t *mo;
 
-    player->ammo[am_mace] -= deathmatch ? USE_MACE_AMMO_1 : USE_MACE_AMMO_2;
+    TakeAmmo(player, am_mace, deathmatch ? USE_MACE_AMMO_1 : USE_MACE_AMMO_2);
     mo = P_SpawnPlayerMissile(player->mo, MT_MACEFX4);
     if (mo)
     {
@@ -1358,7 +1372,7 @@ void A_FireCrossbowPL1(mobj_t *actor, player_t *player, pspdef_t *psp)
     mobj_t *pmo;
 
     pmo = player->mo;
-    player->ammo[am_crossbow] -= USE_CBOW_AMMO_1;
+    TakeAmmo(player, am_crossbow, USE_CBOW_AMMO_1);
     P_SpawnPlayerMissile(pmo, MT_CRBOWFX1);
     P_SPMAngle(pmo, MT_CRBOWFX3, pmo->angle - (ANG45 / 10));
     P_SPMAngle(pmo, MT_CRBOWFX3, pmo->angle + (ANG45 / 10));
@@ -1375,8 +1389,7 @@ void A_FireCrossbowPL2(mobj_t *actor, player_t *player, pspdef_t *psp)
     mobj_t *pmo;
 
     pmo = player->mo;
-    player->ammo[am_crossbow] -=
-        deathmatch ? USE_CBOW_AMMO_1 : USE_CBOW_AMMO_2;
+    TakeAmmo(player, am_crossbow, deathmatch ? USE_CBOW_AMMO_1 : USE_CBOW_AMMO_2);
     P_SpawnPlayerMissile(pmo, MT_CRBOWFX2);
     P_SPMAngle(pmo, MT_CRBOWFX2, pmo->angle - (ANG45 / 10));
     P_SPMAngle(pmo, MT_CRBOWFX2, pmo->angle + (ANG45 / 10));
@@ -1416,7 +1429,7 @@ void A_FireSkullRodPL1(mobj_t *actor, player_t *player, pspdef_t *psp)
     {
         return;
     }
-    player->ammo[am_skullrod] -= USE_SKRD_AMMO_1;
+    TakeAmmo(player, am_skullrod, USE_SKRD_AMMO_1);
     mo = P_SpawnPlayerMissile(player->mo, MT_HORNRODFX1);
     // Randomize the first frame
     if (mo && P_Random() > 128)
@@ -1437,8 +1450,7 @@ void A_FireSkullRodPL1(mobj_t *actor, player_t *player, pspdef_t *psp)
 
 void A_FireSkullRodPL2(mobj_t *actor, player_t *player, pspdef_t *psp)
 {
-    player->ammo[am_skullrod] -=
-        deathmatch ? USE_SKRD_AMMO_1 : USE_SKRD_AMMO_2;
+    TakeAmmo(player, am_skullrod, deathmatch ? USE_SKRD_AMMO_1 : USE_SKRD_AMMO_2);
     P_SpawnPlayerMissile(player->mo, MT_HORNRODFX2);
     // Use MissileMobj instead of the return value from
     // P_SpawnPlayerMissile because we need to give info to the mobj
@@ -1615,7 +1627,7 @@ void A_FirePhoenixPL1(mobj_t *actor, player_t *player, pspdef_t *psp)
 {
     angle_t angle;
 
-    player->ammo[am_phoenixrod] -= USE_PHRD_AMMO_1;
+    TakeAmmo(player, am_phoenixrod, USE_PHRD_AMMO_1);
     P_SpawnPlayerMissile(player->mo, MT_PHOENIXFX1);
     //P_SpawnPlayerMissile(player->mo, MT_MNTRFX2);
     angle = player->mo->angle + ANG180;
@@ -1727,7 +1739,7 @@ void A_FirePhoenixPL2(mobj_t *actor, player_t *player, pspdef_t *psp)
 
 void A_ShutdownPhoenixPL2(mobj_t *actor, player_t *player, pspdef_t *psp)
 {
-    player->ammo[am_phoenixrod] -= USE_PHRD_AMMO_2;
+    TakeAmmo(player, am_phoenixrod, USE_PHRD_AMMO_2);
 }
 
 //----------------------------------------------------------------------------

@@ -35,6 +35,9 @@
 
 #include "p_pspr.h"
 #include "a11y.h" // [crispy] A11Y
+#ifdef MISTER_HYBRID
+#include "mister/mister_port.h"
+#endif
 
 #define LOWERSPEED		FRACUNIT*6
 #define RAISESPEED		FRACUNIT*6
@@ -605,6 +608,14 @@ A_Saw
 
 static void DecreaseAmmo(player_t *player, int ammonum, int amount)
 {
+#ifdef MISTER_HYBRID
+    // the OSD's Infinite Ammo
+    if (crispy->singleplayer && MiSTer_Option(MISTER_OSD_INFINITE_AMMO))
+    {
+        return;
+    }
+#endif
+
     if (ammonum < NUMAMMO)
     {
         player->ammo[ammonum] -= amount;

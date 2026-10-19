@@ -36,6 +36,9 @@
 #include "m_random.h"
 #include "i_input.h"
 #include "i_joystick.h"
+#ifdef MISTER_HYBRID
+#include "mister/mister_port.h"
+#endif
 #include "i_system.h"
 #include "i_timer.h"
 #include "i_video.h"
@@ -1128,9 +1131,16 @@ boolean G_Responder (event_t* ev)
         (demoplayback || gamestate == GS_DEMOSCREEN) 
         ) 
     { 
+#ifdef MISTER_HYBRID
+        // the joystick polls at every tic: a button that went down, not one held
+        if (ev->type == ev_keydown ||  
+            (ev->type == ev_mouse && ev->data1) || 
+            (ev->type == ev_joystick && mister_joy_pressed) ) 
+#else
         if (ev->type == ev_keydown ||  
             (ev->type == ev_mouse && ev->data1) || 
             (ev->type == ev_joystick && ev->data1) ) 
+#endif
         { 
             if(devparm && ev->data1 == 'g')
                 D_PageTicker(); // [STRIFE]: wat? o_O
@@ -1290,6 +1300,11 @@ void G_Ticker (void)
     int         i;
     int         buf; 
     ticcmd_t*   cmd;
+
+#ifdef MISTER_HYBRID
+    // the cheats of the core's OSD (its triggers are taken at every tic)
+    ST_MiSTerCheats(MiSTer_Triggers());
+#endif
 
     // do player reborns if needed
     for (i=0 ; i<MAXPLAYERS ; i++) 

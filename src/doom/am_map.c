@@ -139,7 +139,11 @@ static int revealedsecretwallcolors = -1;
 #define FTOM(x) (((int64_t)((x)<<FRACBITS) * scale_ftom) >> FRACBITS)
 #define MTOF(x) ((((int64_t)(x) * scale_mtof) >> FRACBITS)>>FRACBITS)
 // translates between frame-buffer and map coordinates
-#define CXMTOF(x)  (f_x + MTOF((x)-m_x))
+// MiSTer: in 640x200 and 640x240 twice the pixels across for the same
+// distance (scale_mtof is the one down)
+#define AM_XSHIFT (hiresx - crispy->hires)
+#define MTOFX(x) (((((int64_t)(x) * scale_mtof) >> FRACBITS) << AM_XSHIFT) >> FRACBITS)
+#define CXMTOF(x)  (f_x + MTOFX((x)-m_x))
 #define CYMTOF(y)  (f_y + (f_h - MTOF((y)-m_y)))
 
 // the following is crap
@@ -370,7 +374,7 @@ void AM_activateNewScale(void)
 {
     m_x += m_w/2;
     m_y += m_h/2;
-    m_w = FTOM(f_w);
+    m_w = FTOM(f_w >> AM_XSHIFT);
     m_h = FTOM(f_h);
     m_x -= m_w/2;
     m_y -= m_h/2;
@@ -413,7 +417,7 @@ void AM_restoreScaleAndLoc(void)
     next_m_y = prev_m_y = m_y; // [crispy]
 
     // Change the scaling multipliers
-    scale_mtof = FixedDiv(f_w<<FRACBITS, m_w);
+    scale_mtof = FixedDiv((f_w >> AM_XSHIFT)<<FRACBITS, m_w);
     scale_ftom = FixedDiv(FRACUNIT, scale_mtof);
 }
 
@@ -471,7 +475,7 @@ void AM_findMinMaxBoundaries(void)
     min_w = 2*MAPPLAYERRADIUS; // const? never changed?
     min_h = 2*MAPPLAYERRADIUS;
 
-    a = FixedDiv(f_w<<FRACBITS, max_w);
+    a = FixedDiv((f_w >> AM_XSHIFT)<<FRACBITS, max_w);
     b = FixedDiv(f_h<<FRACBITS, max_h);
   
     min_scale_mtof = a < b ? a : b;
@@ -561,7 +565,7 @@ void AM_initVariables(void)
     mtof_zoommul = FRACUNIT;
     mousewheelzoom = false; // [crispy]
 
-    m_w = FTOM(f_w);
+    m_w = FTOM(f_w >> AM_XSHIFT);
     m_h = FTOM(f_h);
 
     // [crispy] find player to center
@@ -635,6 +639,8 @@ void AM_LevelInit(boolean reinit)
     f_x = f_y = 0;
     f_w = SCREENWIDTH;
     f_h = SCREENHEIGHT - (ST_HEIGHT << crispy->hires);
+    if (SCREEN240)
+	f_h = SCREENHEIGHT; // MiSTer: the status bar over it
 
     AM_drawFline = crispy->smoothmap ? AM_drawFline_Smooth : AM_drawFline_Vanilla;
 
@@ -652,7 +658,7 @@ void AM_LevelInit(boolean reinit)
     {
     // [crispy] initialize zoomlevel on all maps so that a 4096 units
     // square map would just fit in (MAP01 is 3376x3648 units)
-    a = FixedDiv(f_w, (max_w>>MAPBITS < 2048) ? 2*(max_w>>MAPBITS) : 4096);
+    a = FixedDiv(f_w >> AM_XSHIFT, (max_w>>MAPBITS < 2048) ? 2*(max_w>>MAPBITS) : 4096);
     b = FixedDiv(f_h, (max_h>>MAPBITS < 2048) ? 2*(max_h>>MAPBITS) : 4096);
     scale_mtof = FixedDiv(a < b ? a : b, (int) (0.7*MAPUNIT));
     }
@@ -731,6 +737,22 @@ void AM_ResetIDDTcheat (void)
 {
 	cheating = 0;
 }
+
+#ifdef MISTER_HYBRID
+// the OSD's Full Map: IDDT, whether the map is shown or not (all of the map,
+// then the things as well, then off again)
+void AM_MiSTerFullMap (void)
+{
+	if (!crispy->singleplayer)
+	{
+		return;
+	}
+	cheating = (cheating + 1) % 3;
+	plr = &players[displayplayer];
+	plr->message = cheating == 1 ? "Full Map ON" :
+	               cheating == 2 ? "Full Map and Things ON" : "Full Map OFF";
+}
+#endif
 
 // [crispy] center automap on point
 static void AM_SetMapCenter(fixed_t px, fixed_t py)
@@ -2181,10 +2203,10 @@ void AM_drawMarks(void)
 	    {
 		AM_rotatePoint(&pt);
 	    }
-	    fx = (CXMTOF(pt.x) >> crispy->hires) - 1;
+	    fx = (CXMTOF(pt.x) >> hiresx) - 1;
 	    fy = (CYMTOF(pt.y) >> crispy->hires) - 2;
-	    fx_flip = (flipscreenwidth[CXMTOF(pt.x)] >> crispy->hires) - 1;
-	    if (fx >= f_x && fx <= (f_w >> crispy->hires) - w && fy >= f_y && fy <= (f_h >> crispy->hires) - h)
+	    fx_flip = (flipscreenwidth[CXMTOF(pt.x)] >> hiresx) - 1;
+	    if (fx >= f_x && fx <= (f_w >> hiresx) - w && fy >= f_y && fy <= (f_h >> crispy->hires) - h)
 		V_DrawPatch(fx_flip - WIDESCREENDELTA, fy, marknums[i]);
 	}
     }

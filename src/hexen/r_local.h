@@ -399,6 +399,12 @@ extern int flyheight;
 extern fixed_t centerxfrac;
 extern fixed_t centeryfrac;
 extern fixed_t projection;
+// MiSTer: the vertical one: the original's in 200 lines (half the horizontal
+// one in 640x200), 1.2 times that in 240 lines (SCREEN240), the original's
+// tall pixels in square ones, so that the view shows what the original's
+// does. The light levels of a vertical scale as in 200 lines
+extern fixed_t projectiony;
+#define R_LIGHTSCALE(scale) (SCREEN240 ? (scale) / 6 * 5 : (scale))
 
 extern int validcount;
 
@@ -602,6 +608,7 @@ extern int64_t sprtopscreen; // [crispy] WiggleFix
 extern fixed_t sprbotscreen;
 
 extern fixed_t pspritescale, pspriteiscale;
+extern fixed_t pspriteyscale, pspriteyiscale; // MiSTer: vertical, projectiony
 
 extern boolean pspr_interp; // [crispy] interpolate weapon bobbing
 

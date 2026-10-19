@@ -49,4 +49,9 @@ extern cheatseq_t cheat_amap;
 
 extern int followplayer; // [crispy]
 
+#ifdef MISTER_HYBRID
+// the OSD's Full Map (IDDT)
+void AM_MiSTerFullMap (void);
+#endif
+
 #endif

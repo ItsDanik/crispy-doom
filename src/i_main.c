@@ -30,6 +30,9 @@
 #include "i_system.h"
 #include "m_argv.h"
 #include "m_misc.h"
+#ifdef MISTER_HYBRID
+#include "mister/mister_port.h"
+#endif
 
 
 //
@@ -42,6 +45,14 @@ void D_DoomMain (void);
 
 int main(int argc, char **argv)
 {
+#ifdef MISTER_HYBRID
+    // the game of the core's menu entry, or of its list
+    if (!MiSTer_GameArgs(&argc, &argv))
+    {
+        return 0;
+    }
+#endif
+
     // save arguments
 
     myargc = argc;

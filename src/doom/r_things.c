@@ -38,6 +38,12 @@
 #include "v_trans.h" // [crispy] colored blood sprites
 #include "p_local.h" // [crispy] MLOOKUNIT
 #include "r_bmaps.h" // [crispy] R_BrightmapForTexName()
+#ifdef MISTER_HYBRID
+#include "i_video.h"
+#include "m_menu.h" // screenblocks
+#include "st_stuff.h"
+#include "mister/mister_port.h"
+#endif
 
 
 #define MINZ				(FRACUNIT*4)
@@ -82,6 +88,8 @@ laserpatch_t *laserpatch = laserpatch_m;
 //
 fixed_t		pspritescale;
 fixed_t		pspriteiscale;
+fixed_t		pspriteyscale;
+fixed_t		pspriteyiscale;
 
 lighttable_t**	spritelights;
 
@@ -516,6 +524,8 @@ R_DrawVisSprite
     }
 	
     dc_iscale = abs(vis->xiscale)>>detailshift;
+    if (projectiony != projection)
+	dc_iscale = FixedDiv(FRACUNIT, vis->scale); // MiSTer: vertical
     dc_texturemid = vis->texturemid;
     frac = vis->startfrac;
     spryscale = vis->scale;
@@ -568,6 +578,7 @@ void R_ProjectSprite (mobj_t* thing)
     fixed_t		tz;
 
     fixed_t		xscale;
+    fixed_t		yscale; // MiSTer: vertical, projectiony
     
     int			x1;
     int			x2;
@@ -627,6 +638,7 @@ void R_ProjectSprite (mobj_t* thing)
 	return;
     
     xscale = FixedDiv(projection, tz);
+    yscale = projectiony == projection ? xscale : FixedDiv(projectiony, tz);
 	
     gxt = -FixedMul(tr_x,viewsin); 
     gyt = FixedMul(tr_y,viewcos); 
@@ -712,8 +724,8 @@ void R_ProjectSprite (mobj_t* thing)
     
     // [JN] killough 4/9/98: clip things which are out of view due to height
     gzt = interpz + spritetopoffset[lump];
-    if (interpz > viewz + FixedDiv(viewheight << FRACBITS, xscale) ||
-        gzt < (int64_t)viewz - FixedDiv((viewheight << FRACBITS)-viewheight, xscale))
+    if (interpz > viewz + FixedDiv(viewheight << FRACBITS, yscale) ||
+        gzt < (int64_t)viewz - FixedDiv((viewheight << FRACBITS)-viewheight, yscale))
     {
 	return;
     }
@@ -728,7 +740,7 @@ void R_ProjectSprite (mobj_t* thing)
     vis = R_NewVisSprite ();
     vis->translation = NULL; // [crispy] no color translation
     vis->mobjflags = thing->flags;
-    vis->scale = xscale<<detailshift;
+    vis->scale = yscale<<detailshift;
     vis->gx = interpx;
     vis->gy = interpy;
     vis->gz = interpz;
@@ -773,7 +785,7 @@ void R_ProjectSprite (mobj_t* thing)
     else
     {
 	// diminished light
-	index = xscale>>(LIGHTSCALESHIFT-detailshift+crispy->hires);
+	index = xscale>>(LIGHTSCALESHIFT-detailshift+hiresx);
 
 	if (index >= MAXLIGHTSCALE) 
 	    index = MAXLIGHTSCALE-1;
@@ -916,7 +928,7 @@ static void R_DrawLSprite (void)
 #endif
     vis->xiscale = FixedDiv (FRACUNIT, xscale);
     vis->texturemid = laserspot->z - viewz;
-    vis->scale = xscale<<detailshift;
+    vis->scale = (projectiony == projection ? xscale : xscale / 5 * 6)<<detailshift;
 
     tx -= SHORT(patch->width/2)<<FRACBITS;
     vis->x1 =  (centerxfrac + FixedMul(tx, xscale))>>FRACBITS;
@@ -1032,7 +1044,7 @@ void R_DrawPSprite (pspdef_t* psp, psprnum_t psprnum) // [crispy] differentiate 
     vis->texturemid = (BASEYCENTER<<FRACBITS)+FRACUNIT/(2<<crispy->hires)-(psp->sy2-spritetopoffset[lump]);
     vis->x1 = x1 < 0 ? 0 : x1;
     vis->x2 = x2 >= viewwidth ? viewwidth-1 : x2;	
-    vis->scale = pspritescale<<detailshift;
+    vis->scale = pspriteyscale<<detailshift;
     
     if (flip)
     {
@@ -1119,7 +1131,24 @@ void R_DrawPSprite (pspdef_t* psp, psprnum_t psprnum) // [crispy] differentiate 
     }
 
     // [crispy] free look
-    vis->texturemid += FixedMul(((centery - viewheight / 2) << FRACBITS), pspriteiscale) >> detailshift;
+    vis->texturemid += FixedMul(((centery - viewheight / 2) << FRACBITS), pspriteyiscale) >> detailshift;
+
+#ifdef MISTER_HYBRID
+    // MiSTer: in 240 lines the status bar is drawn over the view, where the
+    // HUD margin puts it: the weapon is raised to stand above it as over the
+    // original's status bar (whose view ends 84 rows of the weapon below
+    // their centre)
+    if (SCREEN240 && screenblocks <= 10)
+    {
+	int top, bottom;
+	fixed_t raise;
+
+	MiSTer_HudRows(SCREENHEIGHT, &top, &bottom);
+	raise = (viewheight / 2) * FRACUNIT + 84 * (pspriteyscale << detailshift)
+	      - (bottom - ST_HEIGHT) * FRACUNIT;
+	vis->texturemid += FixedMul(raise, pspriteyiscale) >> detailshift;
+    }
+#endif
 
     R_DrawVisSprite (vis, vis->x1, vis->x2);
 }

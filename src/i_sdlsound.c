@@ -337,12 +337,31 @@ static allocated_sound_t * PitchShift(allocated_sound_t *insnd, int pitch)
     outsnd->pitch = pitch;
     dstbuf = (Sint16 *)outsnd->chunk.abuf;
 
+#ifdef MISTER_HYBRID
+    // MiSTer: the same cells, found by stepping instead of a float division
+    // per sample, which on the ARM took long sounds most of a frame (Hexen
+    // and Heretic shift every sound's pitch; it is done as it starts)
+    {
+        Uint32 pos = 0;
+
+        inp = srcbuf;
+        for (outp = dstbuf; outp < dstbuf + dstlen/2; ++outp)
+        {
+            *outp = *inp;
+            for (pos += srclen; pos >= dstlen; pos -= dstlen)
+            {
+                ++inp;
+            }
+        }
+    }
+#else
     // loop over output buffer. find corresponding input cell, copy over
     for (outp = dstbuf; outp < dstbuf + dstlen/2; ++outp)
     {
         inp = srcbuf + (int)((float)(outp - dstbuf) / dstlen * srclen);
         *outp = *inp;
     }
+#endif
 
     return outsnd;
 }

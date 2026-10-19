@@ -159,6 +159,15 @@ void R_MapPlane(int y, int x1, int x2)
 
         ds_xstep = cachedxstep[y] = FixedDiv(FixedMul(viewsin, planeheight), dy) << detailshift;
         ds_ystep = cachedystep[y] = FixedDiv(FixedMul(viewcos, planeheight), dy) << detailshift;
+        // MiSTer: a step across is distance / projection, the distance from the
+        // vertical projection (projectiony, in 640 wide and 240 lines not the
+        // horizontal one): or the floor slides against the walls when turning
+        if (projectiony != projection)
+        {
+            const fixed_t ratio = FixedDiv(projectiony, projection);
+            ds_xstep = cachedxstep[y] = FixedMul(ds_xstep, ratio);
+            ds_ystep = cachedystep[y] = FixedMul(ds_ystep, ratio);
+        }
     }
     else
     {
@@ -479,7 +488,7 @@ void R_DrawPlanes(void)
                 prev_texture = texture;
             }
 
-            dc_iscale = skyiscale;
+            dc_iscale = SCREEN240 ? skyiscale / 6 * 5 : skyiscale; // MiSTer
             // [crispy] no brightmaps for sky
             dc_colormap[0] = dc_colormap[1] = colormaps;    // sky is allways drawn full bright
             dc_texheight = textureheight[texture]>>FRACBITS;

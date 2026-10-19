@@ -21,6 +21,9 @@
 #include "i_timer.h"
 #include "m_fixed.h" // [crispy]
 #include "doomtype.h"
+#ifdef MISTER_HYBRID
+#include "mister/mister_port.h"
+#endif
 
 //
 // I_GetTime
@@ -34,6 +37,16 @@ static uint64_t basefreq = 0; // [crispy]
 int  I_GetTime (void)
 {
     Uint32 ticks;
+
+#ifdef MISTER_HYBRID
+    // the core's fields: a frame's time is the field it is shown in
+    uint64_t us;
+
+    if (MiSTer_TimeUS(&us))
+    {
+        return (int)(us * TICRATE / 1000000);
+    }
+#endif
 
     ticks = SDL_GetTicks();
 
@@ -52,6 +65,15 @@ int  I_GetTime (void)
 int I_GetTimeMS(void)
 {
     Uint32 ticks;
+
+#ifdef MISTER_HYBRID
+    uint64_t us;
+
+    if (MiSTer_TimeUS(&us))
+    {
+        return (int)(us / 1000);
+    }
+#endif
 
     ticks = SDL_GetTicks();
 
@@ -103,5 +125,13 @@ void I_InitTimer(void)
 
 fixed_t I_GetFracRealTime(void)
 {
+#ifdef MISTER_HYBRID
+    uint64_t us;
+
+    if (MiSTer_TimeUS(&us))
+    {
+        return (fixed_t)(us * TICRATE % 1000000 * FRACUNIT / 1000000);
+    }
+#endif
     return (int64_t)I_GetTimeMS() * TICRATE % 1000 * FRACUNIT / 1000;
 }

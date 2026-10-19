@@ -41,6 +41,8 @@ extern int64_t		sprtopscreen; // [crispy] WiggleFix
 
 extern fixed_t		pspritescale;
 extern fixed_t		pspriteiscale;
+extern fixed_t		pspriteyscale; // MiSTer: vertical, projectiony
+extern fixed_t		pspriteyiscale;
 
 extern boolean pspr_interp; // interpolate weapon bobbing
 

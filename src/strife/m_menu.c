@@ -63,6 +63,9 @@
 
 #include "m_menu.h"
 #include "p_dialog.h"
+#ifdef MISTER_HYBRID
+#include "mister/mister_port.h"
+#endif
 
 #include "m_crispy.h" // [crispy] Crispness menu
 #include "v_trans.h" // [crispy] color translation and color string tables
@@ -1035,6 +1038,12 @@ void M_SaveSelect(int choice)
     M_StringCopy(saveOldString, savegamestrings[choice], sizeof(saveOldString));
     if (!strcmp(savegamestrings[choice], DEH_String(EMPTYSTRING)))
         savegamestrings[choice][0] = 0;
+#ifdef MISTER_HYBRID
+    // a pad cannot type: an empty slot gets a name, Menu OK takes it
+    if (!savegamestrings[choice][0])
+        M_snprintf(savegamestrings[choice], sizeof(savegamestrings[choice]),
+                   "PLAYER %d", choice + 1);
+#endif
     saveCharIndex = strlen(savegamestrings[choice]);
 }
 
@@ -2340,6 +2349,103 @@ boolean M_Responder (event_t* ev)
     ch = 0;
     key = -1;
 
+#ifdef MISTER_HYBRID
+    // MiSTer hybrid core, as in Doom's M_Responder(): the joystick polls at
+    // every tic. The directions repeat every 5 tics; Menu OK and Menu Back
+    // (the MiSTer menu's and the core's own) confirm and go back when
+    // pressed, whatever game actions share their buttons, in the menus and
+    // the dialogues; Menu (Start) opens and closes the menu
+    if (ev->type == ev_joystick)
+    {
+        if (menuactive)
+        {
+            if (joywait < I_GetTime())
+            {
+                if (JOY_GET_DPAD(ev->data6) != JOY_DIR_NONE)
+                {
+                    dir = JOY_GET_DPAD(ev->data6);
+                }
+                else if (JOY_GET_LSTICK(ev->data6) != JOY_DIR_NONE)
+                {
+                    dir = JOY_GET_LSTICK(ev->data6);
+                }
+                else
+                {
+                    dir = JOY_GET_RSTICK(ev->data6);
+                }
+
+                if (dir & JOY_DIR_UP)
+                {
+                    key = key_menu_up;
+                }
+                else if (dir & JOY_DIR_DOWN)
+                {
+                    key = key_menu_down;
+                }
+                if (dir & JOY_DIR_LEFT)
+                {
+                    key = key_menu_left;
+                }
+                else if (dir & JOY_DIR_RIGHT)
+                {
+                    key = key_menu_right;
+                }
+                if (key != -1)
+                {
+                    joywait = I_GetTime() + 5;
+                }
+            }
+
+            if (mister_joy_pressed & MISTER_JOY_OK_MASK)
+            {
+                if (messageToPrint && messageNeedsInput)
+                {
+                    key = key_menu_confirm;
+                }
+                else if (saveStringEnter)
+                {
+                    key = KEY_ENTER;
+                }
+                else
+                {
+                    key = key_menu_forward;
+                }
+                // [crispy] fix joystick fire delay: the button may fire too
+                joystick_fire_countdown = 5;
+            }
+            else if (mister_joy_pressed & MISTER_JOY_BACK_MASK)
+            {
+                if (messageToPrint && messageNeedsInput)
+                {
+                    key = key_menu_abort;
+                }
+                else if (saveStringEnter)
+                {
+                    key = KEY_ESCAPE;
+                }
+                else if (currentMenu->prevMenu == NULL)
+                {
+                    // back from the top menu or a dialogue: out of it
+                    key = key_menu_activate;
+                }
+                else
+                {
+                    key = key_menu_back;
+                }
+            }
+        }
+        if (mister_joy_pressed & (1u << MISTER_JOY_MENU))
+        {
+            key = key_menu_activate;
+        }
+        if (key == -1)
+        {
+            // the game has the joystick when the menu does not use it
+            return false;
+        }
+    }
+    else
+#endif
     if (ev->type == ev_joystick && joywait < I_GetTime())
     {
         if (JOY_GET_DPAD(ev->data6) != JOY_DIR_NONE)

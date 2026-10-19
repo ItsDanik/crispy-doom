@@ -30,6 +30,9 @@
 #include "am_map.h"
 #include "a11y.h" // [crispy] A11Y
 #include "v_trans.h" // [crispy] dp_translation
+#ifdef MISTER_HYBRID
+#include "mister/mister_port.h"
+#endif
 
 
 // TYPES -------------------------------------------------------------------
@@ -848,7 +851,7 @@ static void RefreshBackground(void)
 {
     V_UseBuffer(st_backing_screen);
 
-    if ((SCREENWIDTH >> crispy->hires) != ORIGWIDTH)
+    if ((SCREENWIDTH >> hiresx) != ORIGWIDTH)
     {
         byte *src;
         pixel_t *dest;
@@ -873,7 +876,7 @@ static void RefreshBackground(void)
     }
 
     V_RestoreBuffer();
-    V_CopyRect(0, 0, st_backing_screen, SCREENWIDTH >> crispy->hires,
+    V_CopyRect(0, 0, st_backing_screen, SCREENWIDTH >> hiresx,
                    ORIGSBARHEIGHT, 0, ORIGHEIGHT - ORIGSBARHEIGHT);
 }
 
@@ -887,8 +890,19 @@ void SB_Drawer(void)
         DrawSoundInfo();
     }
     CPlayer = &players[consoleplayer];
+#ifdef MISTER_HYBRID
+    // MiSTer: in 240 lines the view fills the screen whatever its size, and
+    // the status bar is drawn over it again every frame
+    if (SCREEN240 && (screenblocks <= 10 || (automapactive && !crispy->automapoverlay)))
+    {
+        SB_state = -1;
+    }
+    if ((SCREEN240 ? screenblocks > 10 : viewheight == SCREENHEIGHT)
+        && !(automapactive && !crispy->automapoverlay))
+#else
     if (viewheight == SCREENHEIGHT
         && !(automapactive && !crispy->automapoverlay))
+#endif
     {
         DrawFullScreenStuff();
         SB_state = -1;
@@ -1365,28 +1379,28 @@ void DrawMainBar(void)
         for (i = 165; i < 187 - (22 * CPlayer->mana[0]) / MAX_MANA; i++)
         {
          for (j = 0; j <= crispy->hires; j++)
-          for (k = 0; k <= crispy->hires; k++)
+          for (k = 0; k <= hiresx; k++)
           {
-            I_VideoBuffer[SCREENWIDTH * ((i << crispy->hires) + j)
-                          + ((95 + WIDESCREENDELTA) << crispy->hires) + k] = 0;
-            I_VideoBuffer[SCREENWIDTH * ((i << crispy->hires) + j)
-                          + ((96 + WIDESCREENDELTA) << crispy->hires) + k] = 0;
-            I_VideoBuffer[SCREENWIDTH * ((i << crispy->hires) + j)
-                          + ((97 + WIDESCREENDELTA) << crispy->hires) + k] = 0;
+            I_VideoBuffer[SCREENWIDTH * (((i + V_YDelta(i)) << crispy->hires) + j)
+                          + ((95 + WIDESCREENDELTA) << hiresx) + k] = 0;
+            I_VideoBuffer[SCREENWIDTH * (((i + V_YDelta(i)) << crispy->hires) + j)
+                          + ((96 + WIDESCREENDELTA) << hiresx) + k] = 0;
+            I_VideoBuffer[SCREENWIDTH * (((i + V_YDelta(i)) << crispy->hires) + j)
+                          + ((97 + WIDESCREENDELTA) << hiresx) + k] = 0;
           }
         }
         V_DrawPatch(102, 164, manaVialPatch2);
         for (i = 165; i < 187 - (22 * CPlayer->mana[1]) / MAX_MANA; i++)
         {
          for (j = 0; j <= crispy->hires; j++)
-          for (k = 0; k <= crispy->hires; k++)
+          for (k = 0; k <= hiresx; k++)
           {
-            I_VideoBuffer[SCREENWIDTH * ((i << crispy->hires) + j)
-                          + ((103 + WIDESCREENDELTA) << crispy->hires) + k] = 0;
-            I_VideoBuffer[SCREENWIDTH * ((i << crispy->hires) + j)
-                          + ((104 + WIDESCREENDELTA) << crispy->hires) + k] = 0;
-            I_VideoBuffer[SCREENWIDTH * ((i << crispy->hires) + j)
-                          + ((105 + WIDESCREENDELTA) << crispy->hires) + k] = 0;
+            I_VideoBuffer[SCREENWIDTH * (((i + V_YDelta(i)) << crispy->hires) + j)
+                          + ((103 + WIDESCREENDELTA) << hiresx) + k] = 0;
+            I_VideoBuffer[SCREENWIDTH * (((i + V_YDelta(i)) << crispy->hires) + j)
+                          + ((104 + WIDESCREENDELTA) << hiresx) + k] = 0;
+            I_VideoBuffer[SCREENWIDTH * (((i + V_YDelta(i)) << crispy->hires) + j)
+                          + ((105 + WIDESCREENDELTA) << hiresx) + k] = 0;
           }
         }
         oldweapon = CPlayer->readyweapon;
@@ -1765,28 +1779,28 @@ void DrawFullScreenStuff(void)
         for (i = 171; i < 193 - (22 * CPlayer->mana[0]) / MAX_MANA; i++)
         {
          for (j = 0; j <= crispy->hires; j++)
-          for (k = 0; k <= crispy->hires; k++)
+          for (k = 0; k <= hiresx; k++)
           {
-            I_VideoBuffer[SCREENWIDTH * ((i << crispy->hires) + j)
-                          + ((60 + (sboffset > 0 ? 0 : WIDESCREENDELTA))<< crispy->hires) + k] = 0;
-            I_VideoBuffer[SCREENWIDTH * ((i << crispy->hires) + j)
-                          + ((61 + (sboffset > 0 ? 0 : WIDESCREENDELTA))<< crispy->hires) + k] = 0;
-            I_VideoBuffer[SCREENWIDTH * ((i << crispy->hires) + j)
-                          + ((62 + (sboffset > 0 ? 0 : WIDESCREENDELTA))<< crispy->hires) + k] = 0;
+            I_VideoBuffer[SCREENWIDTH * (((i + V_YDelta(i)) << crispy->hires) + j)
+                          + ((60 + (sboffset > 0 ? 0 : WIDESCREENDELTA))<< hiresx) + k] = 0;
+            I_VideoBuffer[SCREENWIDTH * (((i + V_YDelta(i)) << crispy->hires) + j)
+                          + ((61 + (sboffset > 0 ? 0 : WIDESCREENDELTA))<< hiresx) + k] = 0;
+            I_VideoBuffer[SCREENWIDTH * (((i + V_YDelta(i)) << crispy->hires) + j)
+                          + ((62 + (sboffset > 0 ? 0 : WIDESCREENDELTA))<< hiresx) + k] = 0;
           }
         }
         V_DrawSBPatch(67 - sboffset, 170, manaVialPatch2);
         for (i = 171; i < 193 - (22 * CPlayer->mana[1]) / MAX_MANA; i++)
         {
          for (j = 0; j <= crispy->hires; j++)
-          for (k = 0; k <= crispy->hires; k++)
+          for (k = 0; k <= hiresx; k++)
           {
-            I_VideoBuffer[SCREENWIDTH * ((i << crispy->hires) + j)
-                          + ((68 + (sboffset > 0 ? 0 : WIDESCREENDELTA))<< crispy->hires) + k] = 0;
-            I_VideoBuffer[SCREENWIDTH * ((i << crispy->hires) + j)
-                          + ((69 + (sboffset > 0 ? 0 : WIDESCREENDELTA))<< crispy->hires) + k] = 0;
-            I_VideoBuffer[SCREENWIDTH * ((i << crispy->hires) + j)
-                          + ((70 + (sboffset > 0 ? 0 : WIDESCREENDELTA))<< crispy->hires) + k] = 0;
+            I_VideoBuffer[SCREENWIDTH * (((i + V_YDelta(i)) << crispy->hires) + j)
+                          + ((68 + (sboffset > 0 ? 0 : WIDESCREENDELTA))<< hiresx) + k] = 0;
+            I_VideoBuffer[SCREENWIDTH * (((i + V_YDelta(i)) << crispy->hires) + j)
+                          + ((69 + (sboffset > 0 ? 0 : WIDESCREENDELTA))<< hiresx) + k] = 0;
+            I_VideoBuffer[SCREENWIDTH * (((i + V_YDelta(i)) << crispy->hires) + j)
+                          + ((70 + (sboffset > 0 ? 0 : WIDESCREENDELTA))<< hiresx) + k] = 0;
           }
         }
         // Weapon Pieces
@@ -1928,6 +1942,106 @@ void Draw_LoadIcon(void)
 }
 
 
+
+#ifdef MISTER_HYBRID
+// MiSTer hybrid core: the Cheats page of the core's OSD, as in Heretic's
+// SB_MiSTerCheats(). Its cheats are typed into the game's own cheat code
+// (SB_Responder()), with the game's rules (not on Nightmare, not when dead)
+// and messages. An option that stays on is typed when it is switched and
+// when the player starts anew (a level, a saved game, after dying); Buddha,
+// Infinite Ammo and No Target are the port's own (P_DamageMobj(),
+// TakeMana(), p_enemy.c).
+static void MiSTer_TypeCheat(const char *cheat)
+{
+    event_t ev = {0};
+
+    ev.type = ev_keydown;
+    while (*cheat)
+    {
+        ev.data1 = ev.data2 = *cheat++;
+        SB_Responder(&ev);
+    }
+}
+
+void SB_MiSTerCheats(int triggers)
+{
+    static const struct
+    {
+        int bit;
+        int flag;
+        const char *cheat;
+    } toggles[] = {
+        { MISTER_OSD_GOD, CF_GODMODE, "satan" },
+        { MISTER_OSD_NOCLIP, CF_NOCLIP, "casper" },
+    };
+    static const struct
+    {
+        int bit;
+        const char *on, *off;
+    } own[] = {
+        { MISTER_OSD_BUDDHA, "BUDDHA MODE ON", "BUDDHA MODE OFF" },
+        { MISTER_OSD_INFINITE_AMMO, "INFINITE MANA ON", "INFINITE MANA OFF" },
+        { MISTER_OSD_NOTARGET, "NOTARGET MODE ON", "NOTARGET MODE OFF" },
+    };
+    static int was[arrlen(toggles)], was_own[arrlen(own)];
+    static mobj_t *mo;
+    player_t *player = &players[consoleplayer];
+    boolean anew;
+    int i, on;
+
+    if (gamestate != GS_LEVEL || !player->mo || demoplayback)
+    {
+        return;
+    }
+
+    anew = player->mo != mo;
+    mo = player->mo;
+    for (i = 0; i < arrlen(toggles); i++)
+    {
+        on = MiSTer_Option(toggles[i].bit);
+        if ((on != was[i] || (anew && on)) && !(player->cheats & toggles[i].flag) != !on)
+        {
+            MiSTer_TypeCheat(toggles[i].cheat);
+        }
+        was[i] = on;
+    }
+
+    if (crispy->singleplayer)
+    {
+        for (i = 0; i < arrlen(own); i++)
+        {
+            on = MiSTer_Option(own[i].bit);
+            if (on != was_own[i])
+            {
+                P_SetMessage(player, on ? own[i].on : own[i].off, true);
+            }
+            was_own[i] = on;
+        }
+    }
+
+    // Give All: weapons, armor and mana, keys, 25 of each artifact (not the
+    // puzzle items, which would solve the puzzles)
+    if (triggers & MISTER_TRIGGER_GIVE_ALL)
+    {
+        MiSTer_TypeCheat("nra");
+        MiSTer_TypeCheat("locksmith");
+        MiSTer_TypeCheat("indiana");
+    }
+    if (triggers & MISTER_TRIGGER_KILL_ALL)
+    {
+        MiSTer_TypeCheat("butcher");
+    }
+    if (triggers & MISTER_TRIGGER_FULL_MAP)
+    {
+        AM_MiSTerFullMap();
+    }
+    // the map after this one, as the deathmatch timer goes there
+    if ((triggers & MISTER_TRIGGER_NEXT_LEVEL) && crispy->singleplayer)
+    {
+        G_Completed(P_TranslateMap(P_GetMapNextMap(gamemap)), 0);
+    }
+}
+#endif
 
 //==========================================================================
 //
@@ -2507,6 +2621,20 @@ static void HU_DrawCrosshair (void)
 
     // crosshair color
     dp_translation = R_CrosshairColor();
+#ifdef MISTER_HYBRID
+    // MiSTer: in 240 lines at the centre of the view, which fills the screen
+    if (SCREEN240)
+    {
+        V_SetYMode(V_Y_NONE);
+        V_DrawSBPatch(ORIGWIDTH / 2 -
+                crosshairpatch[crispy->crosshairtype].w + crosshairpatch[crispy->crosshairtype].loffset,
+                SCREENHEIGHT / 2 -
+                crosshairpatch[crispy->crosshairtype].h + crosshairpatch[crispy->crosshairtype].toffset,
+                patch);
+        V_SetYMode(V_Y_HUD);
+    }
+    else
+#endif
     V_DrawSBPatch(ORIGWIDTH / 2 -
             crosshairpatch[crispy->crosshairtype].w + crosshairpatch[crispy->crosshairtype].loffset,
             ((screenblocks < 11) ? (ORIGHEIGHT - (SBARHEIGHT >> crispy->hires)) / 2 : ORIGHEIGHT / 2) -

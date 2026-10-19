@@ -31,6 +31,9 @@
 #include "p_dialog.h"   // villsa [STRIFE]
 #include "s_sound.h"
 #include "p_inter.h"
+#ifdef MISTER_HYBRID
+#include "mister/mister_port.h"
+#endif
 
 #include "hu_stuff.h"   // villsa [STRIFE]
 #include "z_zone.h"     // villsa [STRIFE]
@@ -1303,6 +1306,14 @@ void P_DamageMobj(mobj_t* target, mobj_t* inflictor, mobj_t* source, int damage)
             player->armorpoints -= saved;
             damage -= saved;
         }
+#ifdef MISTER_HYBRID
+        // the OSD's Buddha: hurt down to 1, never killed
+        if (crispy->singleplayer && MiSTer_Option(MISTER_OSD_BUDDHA)
+            && damage >= player->health)
+        {
+            damage = player->health - 1;
+        }
+#endif
         player->health -= damage;   // mirror mobj health here for Dave
         
         // [STRIFE] haleyjd 20130302: bug fix - this is *not* capped here.

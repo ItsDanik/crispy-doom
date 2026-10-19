@@ -82,6 +82,24 @@
 #define JOY_GET_LSTICK(x) (((x) >> LSTICK_SHIFT) & 0xf)
 #define JOY_GET_RSTICK(x) (((x) >> RSTICK_SHIFT) & 0xf)
 
+#ifdef MISTER_HYBRID
+// buttons pressed at the last poll of the joystick (i_joystick.c)
+extern unsigned int mister_joy_pressed;
+// the d-pad, L2 and Prev Weapon are actions of the game, set before
+// I_InitJoystick(): MISTER_DPAD_* of the game's (0: the d-pad moves and
+// turns, as in Doom)
+extern int mister_dpad_actions;
+enum
+{
+    MISTER_DPAD_INVENTORY = 1, // left and right in it, down uses the item
+    MISTER_DPAD_FLY = 2,       // up flies up, L2 down (Heretic, Hexen)
+    MISTER_DPAD_JUMP = 4,      // Prev Weapon jumps, Next Weapon goes round
+                               // the weapons alone (Hexen, Strife)
+    MISTER_DPAD_MISSION = 8,   // up shows the mission objectives while held,
+                               // as key_mission does (Strife)
+};
+#endif
+
 // 4-way direction data for gamepad directional inputs.
 enum
 {

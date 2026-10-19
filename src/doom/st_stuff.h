@@ -50,6 +50,11 @@ boolean ST_Responder (event_t* ev);
 // Called by main loop.
 void ST_Ticker (void);
 
+#ifdef MISTER_HYBRID
+// the cheats of the core's OSD, every tic (MiSTer_Triggers())
+void ST_MiSTerCheats(int triggers);
+#endif
+
 // Called by main loop.
 void ST_Drawer (boolean fullscreen, boolean refresh);
 

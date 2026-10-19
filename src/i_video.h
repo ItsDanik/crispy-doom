@@ -37,6 +37,10 @@ extern int SCREENWIDTH;
 extern int SCREENHEIGHT;
 extern int NONWIDEWIDTH; // [crispy] non-widescreen SCREENWIDTH
 extern int WIDESCREENDELTA; // [crispy] horizontal widescreen offset
+// The x of SCREENWIDTH = ORIGWIDTH << hiresx: Crispy's hires, or on the
+// MiSTer 1 in 640x200 and 640x240, which double the pixels across but not
+// down (crispy->hires is 0 there)
+extern int hiresx;
 void I_GetScreenDimensions (void); // [crispy] re-calculate WIDESCREENDELTA
 void I_ToggleVsync (void); // [crispy] calls native SDL vsync toggle
 
@@ -46,6 +50,14 @@ void I_ToggleVsync (void); // [crispy] calls native SDL vsync toggle
 #define MAXHEIGHT_4_3 (ORIGHEIGHT_4_3 << 1) // [crispy]
 
 extern int SCREENHEIGHT_4_3;
+
+#ifdef MISTER_HYBRID
+// MiSTer: the view in 240 lines (the OSD's "Resolution: 320x240"), the
+// 320x200 graphics unscaled over it (V_SetYMode())
+#define SCREEN240 (SCREENHEIGHT == ORIGHEIGHT_4_3)
+#else
+#define SCREEN240 0
+#endif
 
 typedef boolean (*grabmouse_callback_t)(void);
 

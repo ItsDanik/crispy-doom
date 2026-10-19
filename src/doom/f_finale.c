@@ -873,7 +873,7 @@ F_DrawPatchCol
     int		count;
 	
     column = (column_t *)((byte *)patch + LONG(patch->columnofs[col]));
-    desttop = I_VideoBuffer + x;
+    desttop = I_VideoBuffer + x + V_YDelta(0) * SCREENWIDTH;
 
     // step through the posts in a column
     while (column->topdelta != 0xff )
@@ -915,6 +915,8 @@ void F_BunnyScroll (void)
     dxi = (ORIGWIDTH << FRACBITS) / NONWIDEWIDTH;
     dy = (SCREENHEIGHT << FRACBITS) / ORIGHEIGHT;
     dyi = (ORIGHEIGHT << FRACBITS) / SCREENHEIGHT;
+    if (SCREEN240)
+	dy = dyi = FRACUNIT; // MiSTer: unscaled, centred (V_YDelta())
 
     p1 = W_CacheLumpName (DEH_String("PFUB2"), PU_LEVEL);
     p2 = W_CacheLumpName (DEH_String("PFUB1"), PU_LEVEL);

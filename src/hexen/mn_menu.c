@@ -38,6 +38,9 @@
 
 #include "v_trans.h" // [crispy] dp_translation
 #include "crispy.h"
+#ifdef MISTER_HYBRID
+#include "mister/mister_port.h"
+#endif
 
 // MACROS ------------------------------------------------------------------
 
@@ -1366,6 +1369,12 @@ static boolean SCNetCheck(int option)
 static void SCNetCheck2(int option)
 {
     SCNetCheck(option);
+#ifdef MISTER_HYBRID
+    // MiSTer: the episode of the menu entry (Deathkings), not chosen
+    if (crispy->havedeathkings && MiSTer_Episode())
+        SCEpisode(MiSTer_Episode());
+    else
+#endif
     // [crispy] go to episode selection if Deathkings is sideloaded
     if (crispy->havedeathkings)
         SetMenu(MENU_EPISODE);
@@ -2068,6 +2077,101 @@ boolean MN_Responder(event_t * event)
     charTyped = 0;
     key = -1;
 
+#ifdef MISTER_HYBRID
+    // MiSTer hybrid core, as in Doom's M_Responder(): the joystick polls at
+    // every tic. The directions repeat every 5 tics; Menu OK and Menu Back
+    // (the MiSTer menu's and the core's own) confirm and go back when
+    // pressed, whatever game actions share their buttons; Menu (Start) opens
+    // and closes the menu, and any button the title screen and demos
+    if (event->type == ev_joystick)
+    {
+        if (MenuActive && joywait < I_GetTime())
+        {
+            if (JOY_GET_DPAD(event->data6) != JOY_DIR_NONE)
+            {
+                dir = JOY_GET_DPAD(event->data6);
+            }
+            else if (JOY_GET_LSTICK(event->data6) != JOY_DIR_NONE)
+            {
+                dir = JOY_GET_LSTICK(event->data6);
+            }
+            else
+            {
+                dir = JOY_GET_RSTICK(event->data6);
+            }
+
+            if (dir & JOY_DIR_UP)
+            {
+                key = key_menu_up;
+            }
+            else if (dir & JOY_DIR_DOWN)
+            {
+                key = key_menu_down;
+            }
+            if (dir & JOY_DIR_LEFT)
+            {
+                key = key_menu_left;
+            }
+            else if (dir & JOY_DIR_RIGHT)
+            {
+                key = key_menu_right;
+            }
+            if (key != -1)
+            {
+                joywait = I_GetTime() + 5;
+            }
+        }
+
+        if (askforquit)
+        {
+            if (mister_joy_pressed & MISTER_JOY_OK_MASK)
+            {
+                key = key_menu_confirm;
+            }
+            else if (mister_joy_pressed & MISTER_JOY_BACK_MASK)
+            {
+                key = key_menu_abort;
+            }
+        }
+        else if (MenuActive || InfoType)
+        {
+            if (mister_joy_pressed & MISTER_JOY_OK_MASK)
+            {
+                if (FileMenuKeySteal)
+                {
+                    key = KEY_ENTER;
+                }
+                else
+                {
+                    if (CurrentMenu == &SaveMenu)
+                    {
+                        joypadsave = true;
+                    }
+                    key = key_menu_forward;
+                }
+            }
+            else if (mister_joy_pressed & MISTER_JOY_BACK_MASK)
+            {
+                key = FileMenuKeySteal ? KEY_ESCAPE : key_menu_back;
+            }
+        }
+        else if ((gamestate == GS_DEMOSCREEN || (demoplayback && !singledemo))
+                 && mister_joy_pressed)
+        {
+            key = key_menu_activate;
+        }
+        if (mister_joy_pressed & (1u << MISTER_JOY_MENU))
+        {
+            key = key_menu_activate;
+        }
+        if (key == -1)
+        {
+            // the game has the joystick when the menu does not use it
+            return false;
+        }
+    }
+    else
+#endif
     if (event->type == ev_joystick)
     {
         // Simulate key presses from joystick events to interact with the menu.

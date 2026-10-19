@@ -33,6 +33,11 @@
 #include "m_fixed.h"
 #include "m_misc.h"
 
+#ifdef MISTER_HYBRID
+#include "m_controls.h"
+#include "mister/mister_port.h"
+#endif
+
 static SDL_GameController *gamepad = NULL;
 static SDL_Joystick *joystick = NULL;
 
@@ -512,9 +517,219 @@ static int DeviceIndex(void)
     return -1;
 }
 
+#ifdef MISTER_HYBRID
+// MiSTer hybrid core: joystick 1 of the core as a modern pad. Its buttons are
+// the core's "J1" list (MISTER_JOY_*, mapped by the player in the MiSTer
+// menu); R2 fires and L2 runs as well; the left stick moves and strafes, the
+// right one turns (and looks up and down with freelook); the d-pad moves and
+// turns, in Heretic, Hexen and Strife it moves in the inventory (left,
+// right), uses the item (down) and flies up, L2 down (Heretic, Hexen) or
+// shows the mission objectives (Strife); Prev Weapon jumps in Hexen and
+// Strife (mister_dpad_actions). The game's own joystick settings are not
+// used.
+
+// Buttons that went down since the poll before (I_UpdateJoystick() runs at
+// every tic): the menus take presses, not held buttons
+unsigned int mister_joy_pressed;
+int mister_dpad_actions;
+
+#define MISTER_DEAD_ZONE (15 * 32768 / 100)
+#define MISTER_DIR_ZONE (50 * 32768 / 100)
+// the left stick pushed this far makes Main_MiSTer's d-pad of it its own
+#define MISTER_STICK_PAD (10 * 32768 / 100)
+
+static int MiSTer_Axis(int axis)
+{
+    int value = SDL_JoystickGetAxis(joystick, axis);
+
+    if (value < MISTER_DEAD_ZONE && value > -MISTER_DEAD_ZONE)
+    {
+        return 0;
+    }
+
+    return value * (FRACUNIT / 32768);
+}
+
+static int MiSTer_StickDir(int x_axis, int y_axis)
+{
+    int x = SDL_JoystickGetAxis(joystick, x_axis);
+    int y = SDL_JoystickGetAxis(joystick, y_axis);
+    int dir = JOY_DIR_NONE;
+
+    if (y < -MISTER_DIR_ZONE)
+    {
+        dir |= JOY_DIR_UP;
+    }
+    else if (y > MISTER_DIR_ZONE)
+    {
+        dir |= JOY_DIR_DOWN;
+    }
+
+    if (x < -MISTER_DIR_ZONE)
+    {
+        dir |= JOY_DIR_LEFT;
+    }
+    else if (x > MISTER_DIR_ZONE)
+    {
+        dir |= JOY_DIR_RIGHT;
+    }
+
+    return dir;
+}
+
+static void MiSTer_InitJoystick(void)
+{
+    // the game's actions on the core's buttons, whatever the settings say
+    // (always run, joybspeed past the buttons, stays)
+    joybfire = MISTER_JOY_FIRE;
+    joybuse = MISTER_JOY_USE;
+    if (joybspeed < MAX_VIRTUAL_BUTTONS)
+    {
+        joybspeed = MISTER_JOY_RUN;
+    }
+    joybnextweapon = MISTER_JOY_NEXT_WEAPON;
+    joybprevweapon = MISTER_JOY_PREV_WEAPON;
+    joybstrafe = MISTER_JOY_STRAFE;
+    joybautomap = MISTER_JOY_MAP;
+    joybmenu = MISTER_JOY_MENU;
+    joybstrafeleft = -1;
+    joybstraferight = -1;
+    joybjump = -1;
+    // Heretic, Hexen, Strife: the d-pad for the inventory, flying up (L2
+    // down) and jumping
+    if (mister_dpad_actions & MISTER_DPAD_INVENTORY)
+    {
+        joybinvleft = MISTER_JOY_DPAD_LEFT;
+        joybinvright = MISTER_JOY_DPAD_RIGHT;
+        joybuseartifact = MISTER_JOY_DPAD_DOWN;
+    }
+    if (mister_dpad_actions & MISTER_DPAD_FLY)
+    {
+        joybflyup = MISTER_JOY_DPAD_UP;
+        joybflydown = MISTER_JOY_L2;
+        joybflycenter = -1;
+    }
+    if (mister_dpad_actions & MISTER_DPAD_JUMP)
+    {
+        joybjump = MISTER_JOY_PREV_WEAPON;
+        joybprevweapon = -1;
+    }
+
+    // opened at the first poll: the core's joysticks come with SDL's video
+    // driver, which starts later
+    SDL_InitSubSystem(SDL_INIT_JOYSTICK);
+    I_AtExit(I_ShutdownJoystick, true);
+}
+
+static boolean MiSTer_OpenJoystick(void)
+{
+    static boolean tried = false;
+
+    if (joystick != NULL || tried || SDL_NumJoysticks() < 1)
+    {
+        return joystick != NULL;
+    }
+
+    tried = true;
+    joystick = SDL_JoystickOpen(0);
+
+    if (joystick == NULL)
+    {
+        printf("I_InitJoystick: Failed to open the core's joystick: %s\n",
+               SDL_GetError());
+        return false;
+    }
+
+    SDL_JoystickEventState(SDL_ENABLE);
+    printf("I_InitJoystick: %s\n", SDL_JoystickName(joystick));
+    return true;
+}
+
+static void MiSTer_UpdateJoystick(void)
+{
+    static unsigned int held;
+    unsigned int buttons = 0;
+    event_t ev;
+    int hat, i;
+
+    for (i = 0; i < 32; i++)
+    {
+        if (SDL_JoystickGetButton(joystick, i))
+        {
+            buttons |= 1u << i;
+        }
+    }
+
+    // the triggers, axes 4 and 5 (0..32767)
+    if (SDL_JoystickGetAxis(joystick, 5) > TRIGGER_THRESHOLD)
+    {
+        buttons |= 1u << MISTER_JOY_FIRE;
+    }
+    if (SDL_JoystickGetAxis(joystick, 4) > TRIGGER_THRESHOLD)
+    {
+        buttons |= 1u << (mister_dpad_actions & MISTER_DPAD_FLY ? MISTER_JOY_L2 : MISTER_JOY_RUN);
+    }
+
+    hat = SDL_JoystickGetHat(joystick, 0);
+    // Main_MiSTer presses the d-pad as well when the left stick is pushed far
+    // (a digital pad for the cores): a direction the left stick is pushed in
+    // is the stick's, or it turned (and ran, and in Heretic used the
+    // inventory) while it strafed
+    i = SDL_JoystickGetAxis(joystick, 0);
+    hat &= i > MISTER_STICK_PAD ? ~SDL_HAT_RIGHT : i < -MISTER_STICK_PAD ? ~SDL_HAT_LEFT : ~0;
+    i = SDL_JoystickGetAxis(joystick, 1);
+    hat &= i > MISTER_STICK_PAD ? ~SDL_HAT_DOWN : i < -MISTER_STICK_PAD ? ~SDL_HAT_UP : ~0;
+    if (mister_dpad_actions)
+    {
+        buttons |= ((hat & SDL_HAT_UP) ? 1u << MISTER_JOY_DPAD_UP : 0) |
+                   ((hat & SDL_HAT_DOWN) ? 1u << MISTER_JOY_DPAD_DOWN : 0) |
+                   ((hat & SDL_HAT_LEFT) ? 1u << MISTER_JOY_DPAD_LEFT : 0) |
+                   ((hat & SDL_HAT_RIGHT) ? 1u << MISTER_JOY_DPAD_RIGHT : 0);
+    }
+
+    // Strife: d-pad up is the objectives' key, held
+    if (mister_dpad_actions & MISTER_DPAD_MISSION &&
+        (buttons ^ held) & (1u << MISTER_JOY_DPAD_UP))
+    {
+        ev.type = buttons & (1u << MISTER_JOY_DPAD_UP) ? ev_keydown : ev_keyup;
+        ev.data1 = key_mission;
+        ev.data2 = key_mission;
+        ev.data3 = key_mission;
+        ev.data4 = ev.data5 = ev.data6 = 0;
+        D_PostEvent(&ev);
+    }
+
+    mister_joy_pressed = buttons & ~held;
+    held = buttons;
+
+    ev.type = ev_joystick;
+    ev.data1 = buttons;
+    // turn: the right stick, or the d-pad all the way
+    ev.data2 = (hat & SDL_HAT_LEFT) && !mister_dpad_actions ? -FRACUNIT :
+               (hat & SDL_HAT_RIGHT) && !mister_dpad_actions ? FRACUNIT : MiSTer_Axis(2);
+    // forward and back: the left stick, or the d-pad
+    ev.data3 = (hat & SDL_HAT_UP) && !mister_dpad_actions ? -FRACUNIT :
+               (hat & SDL_HAT_DOWN) && !mister_dpad_actions ? FRACUNIT : MiSTer_Axis(1);
+    ev.data4 = MiSTer_Axis(0);
+    ev.data5 = MiSTer_Axis(3);
+    ev.data6 = ((((hat & SDL_HAT_UP) ? JOY_DIR_UP : 0) |
+                 ((hat & SDL_HAT_DOWN) ? JOY_DIR_DOWN : 0) |
+                 ((hat & SDL_HAT_LEFT) ? JOY_DIR_LEFT : 0) |
+                 ((hat & SDL_HAT_RIGHT) ? JOY_DIR_RIGHT : 0)) << DPAD_SHIFT) |
+               (MiSTer_StickDir(0, 1) << LSTICK_SHIFT) |
+               (MiSTer_StickDir(2, 3) << RSTICK_SHIFT);
+    D_PostEvent(&ev);
+}
+#endif
+
 void I_InitJoystick(void)
 {
     int index;
+
+#ifdef MISTER_HYBRID
+    MiSTer_InitJoystick();
+    return;
+#endif
 
     if (!usejoystick || !strcmp(joystick_guid, ""))
     {
@@ -765,6 +980,14 @@ static int GetDirectionalInput(int x, int y)
 
 void I_UpdateJoystick(void)
 {
+#ifdef MISTER_HYBRID
+    if (MiSTer_OpenJoystick())
+    {
+        MiSTer_UpdateJoystick();
+    }
+    return;
+#endif
+
     if (use_gamepad)
     {
         I_UpdateGamepad();

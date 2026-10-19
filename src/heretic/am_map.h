@@ -89,7 +89,11 @@
 #define FTOM(x) FixedMul(((x)<<16),scale_ftom)
 #define MTOF(x) (FixedMul((x),scale_mtof)>>16)
 // translates between frame-buffer and map coordinates
-#define CXMTOF(x)  (f_x + MTOF((x)-m_x))
+// MiSTer: in 640x200 and 640x240 twice the pixels across for the same
+// distance (scale_mtof is the one down)
+#define AM_XSHIFT (hiresx - crispy->hires)
+#define MTOFX(x) ((FixedMul((x),scale_mtof) << AM_XSHIFT) >> 16)
+#define CXMTOF(x)  (f_x + MTOFX((x)-m_x))
 #define CYMTOF(y)  (f_y + (f_h - MTOF((y)-m_y)))
 
 // the following is crap
@@ -127,6 +131,10 @@ extern const char *LevelNames[];
 extern int followplayer; // [crispy]
 
 void AM_Stop(void);
+#ifdef MISTER_HYBRID
+// the OSD's Full Map (RAVMAP)
+void AM_MiSTerFullMap(void);
+#endif
 
 
 #endif

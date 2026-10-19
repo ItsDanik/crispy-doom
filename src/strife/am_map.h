@@ -47,6 +47,11 @@ extern cheatseq_t cheat_amap;
 
 extern int followplayer; // [crispy]
 
+#ifdef MISTER_HYBRID
+// the OSD's Full Map (TOPO)
+void AM_MiSTerFullMap (void);
+#endif
+
 // [crispy] holding down the "Run" key may trigger special behavior,
 // e.g. quick exit, automap pan/zoom speed
 boolean speedkeydown (void);

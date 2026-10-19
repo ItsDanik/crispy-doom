@@ -45,6 +45,9 @@
 #include "v_video.h"
 #include "w_main.h"
 #include "am_map.h"
+#ifdef MISTER_HYBRID
+#include "mister/mister_port.h"
+#endif
 
 #include "hexen_icon.c"
 
@@ -636,6 +639,10 @@ void D_DoomMain(void)
     ST_Message("I_Init: Setting up machine state.\n");
     I_CheckIsScreensaver();
     I_InitTimer();
+#ifdef MISTER_HYBRID
+    // the pad: the d-pad for the inventory and flying, Prev Weapon jumps
+    mister_dpad_actions = MISTER_DPAD_INVENTORY | MISTER_DPAD_FLY | MISTER_DPAD_JUMP;
+#endif
     I_InitJoystick();
     I_InitSound(hexen);
     I_InitMusic();
@@ -995,6 +1002,27 @@ static void WarpCheck(void)
     }
 }
 
+#ifdef MISTER_HYBRID
+// MiSTer: the OSD's Resolution (I_GetScreenDimensions()), as the Crispness
+// menu's hires toggle changes the resolution
+extern void I_ReInitGraphics(int reinit);
+extern void AM_LevelInit(boolean reinit);
+extern void AM_initVariables(void);
+
+static void H2_MiSTerResolution(void)
+{
+    I_ReInitGraphics(REINIT_FRAMEBUFFERS);
+    R_ExecuteSetViewSize();
+    AM_LevelInit(true);
+    if (automapactive)
+    {
+        AM_initVariables();
+    }
+    SB_state = -1;
+    BorderNeedRefresh = true;
+}
+#endif
+
 //==========================================================================
 //
 // H2_GameLoop
@@ -1061,6 +1089,15 @@ void H2_GameLoop(void)
 
         DrawAndBlit();
 
+#ifdef MISTER_HYBRID
+        // MiSTer: the OSD's "Resolution", while the game runs
+        if (!crispy->post_rendering_hook && (MiSTer_Option(MISTER_OSD_240) != SCREEN240 ||
+             MiSTer_Option(MISTER_OSD_640) != hiresx))
+        {
+            crispy->post_rendering_hook = H2_MiSTerResolution;
+        }
+#endif
+
         // [crispy] post-rendering function pointer to apply config changes
         // that affect rendering and that are better applied after the current
         // frame has finished rendering
@@ -1113,6 +1150,11 @@ void H2_ProcessEvents(void)
 
 static void DrawAndBlit(void)
 {
+#ifdef MISTER_HYBRID
+    // MiSTer: in 240 lines the full-screen pictures are centred
+    V_SetYMode(SCREEN240 && gamestate != GS_LEVEL ? V_Y_CENTRE : V_Y_NONE);
+#endif
+
     if (crispy->uncapped)
     {
         I_UpdateFracTic();
@@ -1167,6 +1209,8 @@ static void DrawAndBlit(void)
             }
             // [crispy] check for translucent HUD
             SB_Translucent(TRANSLUCENT_HUD && (!automapactive || crispy->automapoverlay));
+            // MiSTer: in 240 lines at the HUD margins, over the view
+            V_SetYMode(V_Y_HUD);
             CT_Drawer();
             UpdateState |= I_FULLVIEW;
             SB_Drawer();
@@ -1183,6 +1227,18 @@ static void DrawAndBlit(void)
             PageDrawer();
             break;
     }
+
+#ifdef MISTER_HYBRID
+    // MiSTer: in 240 lines the full-screen pictures are centred, black above
+    // and below
+    if (SCREEN240 && gamestate != GS_LEVEL)
+    {
+        const int band = (SCREENHEIGHT - ORIGHEIGHT) / 2;
+
+        V_DrawFilledBox(0, 0, SCREENWIDTH, band, 0);
+        V_DrawFilledBox(0, SCREENHEIGHT - band, SCREENWIDTH, band, 0);
+    }
+#endif
 
     if (testcontrols)
     {
@@ -1211,7 +1267,9 @@ static void DrawAndBlit(void)
     SB_Translucent(false);
 
     // Draw Menu
+    V_SetYMode(V_Y_CENTRE);
     MN_Drawer();
+    V_SetYMode(V_Y_NONE);
 
     // Send out any new accumulation
     NetUpdate();

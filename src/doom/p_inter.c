@@ -38,6 +38,9 @@
 #include "s_sound.h"
 
 #include "p_inter.h"
+#ifdef MISTER_HYBRID
+#include "mister/mister_port.h"
+#endif
 
 
 #define BONUSADD	6
@@ -958,6 +961,14 @@ P_DamageMobj
 	    player->armorpoints -= saved;
 	    damage -= saved;
 	}
+#ifdef MISTER_HYBRID
+	// the OSD's Buddha: hurt down to 1, never killed
+	if (crispy->singleplayer && MiSTer_Option(MISTER_OSD_BUDDHA)
+	    && damage >= player->health)
+	{
+	    damage = player->health - 1;
+	}
+#endif
 	player->health -= damage; 	// mirror mobj health here for Dave
 	// [crispy] negative player health
 	player->neghealth = player->health;

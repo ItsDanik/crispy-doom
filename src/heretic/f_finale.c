@@ -272,7 +272,7 @@ void F_DemonScroll(void)
             patch1 = (patch_t *)p1;
             patch2 = (patch_t *)p2;
 
-            x = ((SCREENWIDTH >> crispy->hires) - SHORT(patch1->width)) / 2
+            x = ((SCREENWIDTH >> hiresx) - SHORT(patch1->width)) / 2
                 - WIDESCREENDELTA;
 
             // [crispy] pillar boxing
@@ -290,17 +290,17 @@ void F_DemonScroll(void)
         else // [crispy] assume RAW format
         {
             int width = W_LumpLength(i1) / ORIGHEIGHT;
-            int x = ((SCREENWIDTH >> crispy->hires) - width) / 2
+            int x = ((SCREENWIDTH >> hiresx) - width) / 2
                     - WIDESCREENDELTA;
 
             // [crispy] pillar boxing
             if (SCREENWIDTH != NONWIDEWIDTH)
             {
-                V_DrawFilledBox(0, 0, WIDESCREENDELTA << crispy->hires,
+                V_DrawFilledBox(0, 0, WIDESCREENDELTA << hiresx,
                                 SCREENHEIGHT, 0);
                 V_DrawFilledBox(
-                    SCREENWIDTH - (WIDESCREENDELTA << crispy->hires), 0,
-                    WIDESCREENDELTA << crispy->hires, SCREENHEIGHT, 0);
+                    SCREENWIDTH - (WIDESCREENDELTA << hiresx), 0,
+                    WIDESCREENDELTA << hiresx, SCREENHEIGHT, 0);
             }
 
             V_DrawScaledBlock(x, y - 200, width, ORIGHEIGHT, p2);

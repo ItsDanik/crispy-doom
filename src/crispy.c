@@ -33,6 +33,10 @@ static crispy_t crispy_s = {
 #endif
 	.vsync = 1,
 	.widescreen = 1, // match screen by default
+#ifdef MISTER_HYBRID
+	// a frame for every field of the core's 59.64, between the 35 tics
+	.uncapped = 1,
+#endif
 };
 crispy_t *const crispy = &crispy_s;
 

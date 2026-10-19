@@ -30,6 +30,9 @@
 #include "am_map.h"
 #include "v_trans.h" // [crispy] dp_translation & blend truecolor
 #include "a11y.h" // [crispy] A11Y
+#ifdef MISTER_HYBRID
+#include "mister/mister_port.h"
+#endif
 
 // Types
 
@@ -495,7 +498,8 @@ static void ShadeLine(int x, int y, int height, int shade)
     byte *shades;
 #endif
 
-    x <<= crispy->hires;
+    x <<= hiresx;
+    y += V_YDelta(y); // MiSTer
     y <<= crispy->hires;
     height <<= crispy->hires;
 
@@ -504,10 +508,10 @@ static void ShadeLine(int x, int y, int height, int shade)
 #else
     shade = 0xFF - (((9 + shade * 2) << 8) / 32); // [crispy] shade to darkest 32nd COLORMAP row
 #endif
-    dest = I_VideoBuffer + y * SCREENWIDTH + x + (WIDESCREENDELTA << crispy->hires);
+    dest = I_VideoBuffer + y * SCREENWIDTH + x + (WIDESCREENDELTA << hiresx);
     while (height--)
     {
-        if (crispy->hires)
+        if (hiresx)
 #ifndef CRISPY_TRUECOLOR
             *(dest + 1) = *(shades + *dest);
         *(dest) = *(shades + *dest);
@@ -657,7 +661,7 @@ static void RefreshBackground()
 {
     V_UseBuffer(st_backing_screen);
 
-    if ((SCREENWIDTH >> crispy->hires) != ORIGWIDTH)
+    if ((SCREENWIDTH >> hiresx) != ORIGWIDTH)
     {
         byte *src;
         pixel_t *dest;
@@ -685,7 +689,7 @@ static void RefreshBackground()
     }
 
     V_RestoreBuffer();
-    V_CopyRect(0, 0, st_backing_screen, SCREENWIDTH >> crispy->hires, 42, 0, 158);
+    V_CopyRect(0, 0, st_backing_screen, SCREENWIDTH >> hiresx, 42, 0, 158);
 }
 
 extern int left_widget_w, right_widget_w; // [crispy]
@@ -702,7 +706,18 @@ void SB_Drawer(void)
         DrawSoundInfo();
     }
     CPlayer = &players[consoleplayer];
+#ifdef MISTER_HYBRID
+    // MiSTer: in 240 lines the view fills the screen whatever its size, and
+    // the status bar is drawn over it again every frame
+    if (SCREEN240 && (screenblocks <= 10 || (automapactive && !crispy->automapoverlay)))
+    {
+        SB_state = -1;
+    }
+    if ((SCREEN240 ? screenblocks > 10 : viewheight == SCREENHEIGHT) &&
+        (!automapactive || crispy->automapoverlay))
+#else
     if (viewheight == SCREENHEIGHT && (!automapactive || crispy->automapoverlay))
+#endif
     {
         DrawFullScreenStuff();
         SB_state = -1;
@@ -1307,6 +1322,99 @@ void DrawFullScreenStuff(void)
         }
     }
 }
+
+#ifdef MISTER_HYBRID
+// MiSTer hybrid core: the Cheats page of the core's OSD, as in Doom's
+// ST_MiSTerCheats(). Its cheats are typed into the game's own cheat code
+// (SB_Responder()), with the game's rules (not on Nightmare) and messages. An
+// option that stays on is typed when it is switched and when the player
+// starts anew (a level, a saved game, after dying); Buddha and Infinite Ammo
+// are the port's own (P_DamageMobj(), TakeAmmo()).
+static void MiSTer_TypeCheat(const char *cheat)
+{
+    event_t ev = {0};
+
+    ev.type = ev_keydown;
+    while (*cheat)
+    {
+        ev.data1 = ev.data2 = *cheat++;
+        SB_Responder(&ev);
+    }
+}
+
+void SB_MiSTerCheats(int triggers)
+{
+    static const struct
+    {
+        int bit;
+        int flag;
+        const char *cheat;
+    } toggles[] = {
+        { MISTER_OSD_GOD, CF_GODMODE, "quicken" },
+        { MISTER_OSD_NOCLIP, CF_NOCLIP, "kitty" },
+        { MISTER_OSD_NOTARGET, CF_NOTARGET, "notarget" },
+    };
+    static int was[arrlen(toggles)];
+    static int buddha, infinite;
+    static mobj_t *mo;
+    player_t *player = &players[consoleplayer];
+    boolean anew;
+    int i, on;
+
+    if (gamestate != GS_LEVEL || !player->mo || demoplayback)
+    {
+        return;
+    }
+
+    anew = player->mo != mo;
+    mo = player->mo;
+    for (i = 0; i < arrlen(toggles); i++)
+    {
+        on = MiSTer_Option(toggles[i].bit);
+        if ((on != was[i] || (anew && on)) && !(player->cheats & toggles[i].flag) != !on)
+        {
+            MiSTer_TypeCheat(toggles[i].cheat);
+        }
+        was[i] = on;
+    }
+
+    if (crispy->singleplayer)
+    {
+        on = MiSTer_Option(MISTER_OSD_BUDDHA);
+        if (on != buddha)
+        {
+            P_SetMessage(player, on ? "BUDDHA MODE ON" : "BUDDHA MODE OFF", false);
+        }
+        buddha = on;
+        on = MiSTer_Option(MISTER_OSD_INFINITE_AMMO);
+        if (on != infinite)
+        {
+            P_SetMessage(player, on ? "INFINITE AMMO ON" : "INFINITE AMMO OFF", false);
+        }
+        infinite = on;
+    }
+
+    // Give All: weapons, ammo and armor, keys, all the artifacts
+    if (triggers & MISTER_TRIGGER_GIVE_ALL)
+    {
+        MiSTer_TypeCheat("rambo");
+        MiSTer_TypeCheat("skel");
+        MiSTer_TypeCheat("gimmez0");
+    }
+    if (triggers & MISTER_TRIGGER_KILL_ALL)
+    {
+        MiSTer_TypeCheat("massacre");
+    }
+    if (triggers & MISTER_TRIGGER_FULL_MAP)
+    {
+        AM_MiSTerFullMap();
+    }
+    if ((triggers & MISTER_TRIGGER_NEXT_LEVEL) && crispy->singleplayer)
+    {
+        G_ExitLevel();
+    }
+}
+#endif
 
 //--------------------------------------------------------------------------
 //
@@ -1981,6 +2089,20 @@ static void HU_DrawCrosshair (void)
    
     // crosshair color
     dp_translation = R_CrosshairColor();
+#ifdef MISTER_HYBRID
+    // MiSTer: in 240 lines at the centre of the view, which fills the screen
+    if (SCREEN240)
+    {
+        V_SetYMode(V_Y_NONE);
+        V_DrawSBPatch(ORIGWIDTH / 2 -
+                crosshairpatch[crispy->crosshairtype].w + crosshairpatch[crispy->crosshairtype].loffset,
+                SCREENHEIGHT / 2 -
+                crosshairpatch[crispy->crosshairtype].h + crosshairpatch[crispy->crosshairtype].toffset,
+                patch);
+        V_SetYMode(V_Y_HUD);
+    }
+    else
+#endif
     V_DrawSBPatch(ORIGWIDTH / 2 -
             crosshairpatch[crispy->crosshairtype].w + crosshairpatch[crispy->crosshairtype].loffset,
             ((screenblocks < 11) ? (ORIGHEIGHT - (SBARHEIGHT >> crispy->hires)) / 2 : ORIGHEIGHT / 2) -

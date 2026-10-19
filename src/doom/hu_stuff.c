@@ -869,6 +869,20 @@ static void HU_DrawCrosshair (void)
     dp_translucent = true;
     dp_translation = R_LaserspotColor();
 
+#ifdef MISTER_HYBRID
+    // MiSTer: in 240 lines at the centre of the view, which fills the screen
+    if (SCREEN240)
+    {
+        V_SetYMode(V_Y_NONE);
+        V_DrawPatch(ORIGWIDTH/2 -
+                    laserpatch[crispy->crosshairtype].w,
+                    SCREENHEIGHT/2 -
+                    laserpatch[crispy->crosshairtype].h,
+                    patch);
+        V_SetYMode(V_Y_HUD);
+    }
+    else
+#endif
     V_DrawPatch(ORIGWIDTH/2 -
                 laserpatch[crispy->crosshairtype].w,
                 ((screenblocks <= 10) ? (ORIGHEIGHT-ST_HEIGHT)/2 : ORIGHEIGHT/2) -

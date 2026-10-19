@@ -3210,7 +3210,10 @@ float M_GetFloatVariable(const char *name)
 
 static char *GetDefaultConfigDir(void)
 {
-#if !defined(_WIN32) || defined(_WIN32_WCE)
+#if defined(MISTER_HYBRID)
+    // the game's folder on the MiSTer, where the launcher runs it
+    return M_StringDuplicate("./");
+#elif !defined(_WIN32) || defined(_WIN32_WCE)
 
     // Configuration settings are stored in an OS-appropriate path
     // determined by SDL.  On typical Unix systems, this might be

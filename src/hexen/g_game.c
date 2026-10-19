@@ -30,6 +30,9 @@
 #include "m_misc.h"
 #include "p_local.h"
 #include "v_video.h"
+#ifdef MISTER_HYBRID
+#include "mister/mister_port.h"
+#endif
 
 #define AM_STARTKEY	9
 
@@ -1391,6 +1394,11 @@ void G_Ticker(void)
     int i, buf;
     ticcmd_t *cmd = NULL;
     extern boolean automapactive;
+
+#ifdef MISTER_HYBRID
+    // the cheats of the core's OSD (its triggers are taken at every tic)
+    SB_MiSTerCheats(MiSTer_Triggers());
+#endif
 
 //
 // do player reborns if needed

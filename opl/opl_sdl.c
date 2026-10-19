@@ -35,6 +35,27 @@
 
 #include "opl_queue.h"
 
+#ifdef MISTER_HYBRID
+// MiSTer hybrid core: its FM chip (a YM3812) plays the music. The register
+// writes go to it, each at the audio frame it is made at, and the software
+// chip is not run; it plays for a core without the chip, and while the OSD
+// says "FM Music: Software". It gets every write all the same, so that the
+// player can switch while the music plays.
+#include <mister_hybrid.h>
+#include "../src/mister/mister_port.h"
+
+// the chip's level (MH_FMVolume()) that is as loud as the software chip
+// (measured with fakecore: 1.5 times the chip as it comes)
+#define FM_VOLUME 48
+
+static int fm_core_chip; // the core has the chip
+static int fm_core;      // and it plays
+static SDL_threadID fm_audio_thread;
+static unsigned int fm_ahead; // frames of the buffer being filled so far
+static uint8_t fm_shadow[0x100]; // the chip's registers, to load it again
+
+#endif
+
 
 #ifndef DISABLE_SDL2MIXER
 
@@ -160,6 +181,47 @@ static void AdvanceTime(unsigned int nsamples)
     SDL_UnlockMutex(callback_queue_mutex);
 }
 
+#ifdef MISTER_HYBRID
+// Follows the OSD's "FM Music", at the start of each audio buffer
+static void FMFollowOption(void)
+{
+    int reg, play;
+
+    play = fm_core_chip && !MiSTer_Option(MISTER_OSD_SOFT_FM);
+    if (play == fm_core)
+    {
+        return;
+    }
+    SDL_LockMutex(callback_mutex);
+    if (play)
+    {
+        // enabling clears the chip: the registers as the music left them,
+        // the notes playing last (0xB0..0xB8)
+        MH_FMEnable(1);
+        MH_FMVolume(FM_VOLUME);
+        MH_FMWrite(0x01, fm_shadow[0x01], 0);
+        MH_FMWrite(0x08, fm_shadow[0x08], 0);
+        for (reg = 0x20; reg < 0x100; reg++)
+        {
+            if (reg < 0xB0 || reg > 0xB8)
+            {
+                MH_FMWrite(reg, fm_shadow[reg], 0);
+            }
+        }
+        for (reg = 0xB0; reg <= 0xB8; reg++)
+        {
+            MH_FMWrite(reg, fm_shadow[reg], 0);
+        }
+    }
+    else
+    {
+        MH_FMEnable(0);
+    }
+    fm_core = play;
+    SDL_UnlockMutex(callback_mutex);
+}
+#endif
+
 // Call the OPL emulator code to fill the specified buffer.
 
 static void FillBuffer(uint8_t *buffer, unsigned int nsamples)
@@ -168,6 +230,13 @@ static void FillBuffer(uint8_t *buffer, unsigned int nsamples)
     // 1 second long, which should always be much longer than the
     // SDL mix buffer.
     assert(nsamples < mixing_freq);
+
+#ifdef MISTER_HYBRID
+    if (fm_core)
+    {
+        return;
+    }
+#endif
 
     // OPL output is generated into temporary buffer and then mixed
     // (to avoid overflows etc.)
@@ -187,6 +256,10 @@ static void OPL_Mix_Callback(int chan, void *stream, int len, void *udata)
     // full.
     filled = 0;
     buffer_samples = len / 4;
+#ifdef MISTER_HYBRID
+    fm_audio_thread = SDL_ThreadID();
+    FMFollowOption();
+#endif
 
     while (filled < buffer_samples)
     {
@@ -222,6 +295,9 @@ static void OPL_Mix_Callback(int chan, void *stream, int len, void *udata)
 
         FillBuffer(buffer + filled * 4, nsamples);
         filled += nsamples;
+#ifdef MISTER_HYBRID
+        fm_ahead = (uint64_t) filled * MH_AUDIO_RATE / mixing_freq;
+#endif
 
         // Invoke callbacks for this point in time.
 
@@ -232,6 +308,14 @@ static void OPL_Mix_Callback(int chan, void *stream, int len, void *udata)
 static void OPL_SDL_Shutdown(void)
 {
     Mix_HookMusic(NULL, NULL);
+
+#ifdef MISTER_HYBRID
+    if (fm_core)
+    {
+        MH_FMEnable(0);
+        fm_core = 0;
+    }
+#endif
 
     if (sdl_was_initialized)
     {
@@ -352,6 +436,12 @@ static int OPL_SDL_Init(unsigned int port_base)
     OPL3_Reset(&opl_chip, mixing_freq);
     opl_opl3mode = 0;
 
+#ifdef MISTER_HYBRID
+    // the first audio buffer switches the chip on (FMFollowOption())
+    fm_core_chip = MH_Open() && MH_FMAvailable();
+    fm_core = 0;
+#endif
+
     callback_mutex = SDL_CreateMutex();
     callback_queue_mutex = SDL_CreateMutex();
 
@@ -443,6 +533,25 @@ static void WriteRegister(unsigned int reg_num, unsigned int value)
             opl_opl3mode = value & 0x01;
 
         default:
+#ifdef MISTER_HYBRID
+            // the core's chip is an OPL2: the registers of the second
+            // bank of an OPL3 are not there
+            if (reg_num < 0x100)
+            {
+                fm_shadow[reg_num] = value;
+            }
+            if (fm_core)
+            {
+                if (reg_num < 0x100)
+                {
+                    MH_FMWrite(reg_num, value,
+                        SDL_ThreadID() == fm_audio_thread ? fm_ahead : 0);
+                }
+                // not run meanwhile: written at once
+                OPL3_WriteReg(&opl_chip, reg_num, value);
+                break;
+            }
+#endif
             OPL3_WriteRegBuffered(&opl_chip, reg_num, value);
             break;
     }

@@ -66,6 +66,10 @@
 #include "m_controls.h"
 #include "hu_lib.h"     // [STRIFE]
 #include "hu_stuff.h"
+#ifdef MISTER_HYBRID
+#include "g_game.h"
+#include "mister/mister_port.h"
+#endif
 
 //
 // STATUS BAR DATA
@@ -317,6 +321,118 @@ void ST_Stop(void);
 
 // [STRIFE]
 static char st_msgbuf[ST_MSGWIDTH];
+
+#ifdef MISTER_HYBRID
+// MiSTer hybrid core: the Cheats page of the core's OSD, as in Doom's
+// ST_MiSTerCheats(). Its cheats are typed into the game's own cheat code
+// (ST_Responder()), with the game's rules (single player, not in demos) and
+// messages. An option that stays on is typed when it is switched and when
+// the player starts anew (a level, a saved game, after dying); Buddha,
+// Infinite Ammo and No Target are the port's own (P_DamageMobj(),
+// P_FireWeapon() and so on, p_enemy.c).
+static void MiSTer_TypeCheat(const char *cheat)
+{
+    event_t ev = {0};
+
+    ev.type = ev_keydown;
+    while (*cheat)
+    {
+        ev.data1 = ev.data2 = *cheat++;
+        ST_Responder(&ev);
+    }
+}
+
+void ST_MiSTerCheats(int triggers)
+{
+    static const struct
+    {
+        int bit;
+        int flag;
+        const char *cheat;
+    } toggles[] = {
+        { MISTER_OSD_GOD, CF_GODMODE, "omnipotent" },
+        { MISTER_OSD_NOCLIP, CF_NOCLIP, "elvis" },
+    };
+    static const struct
+    {
+        int bit;
+        const char *on, *off;
+    } own[] = {
+        { MISTER_OSD_BUDDHA, "Buddha Mode ON", "Buddha Mode OFF" },
+        { MISTER_OSD_INFINITE_AMMO, "Infinite Ammo ON", "Infinite Ammo OFF" },
+        { MISTER_OSD_NOTARGET, "Notarget Mode ON", "Notarget Mode OFF" },
+    };
+    static int was[arrlen(toggles)], was_own[arrlen(own)];
+    static mobj_t *mo;
+    boolean anew;
+    int i, on;
+
+    if (gamestate != GS_LEVEL || !plyr || !plyr->mo || demoplayback)
+    {
+        return;
+    }
+
+    anew = plyr->mo != mo;
+    mo = plyr->mo;
+    for (i = 0; i < arrlen(toggles); i++)
+    {
+        on = MiSTer_Option(toggles[i].bit);
+        if ((on != was[i] || (anew && on)) && !(plyr->cheats & toggles[i].flag) != !on)
+        {
+            MiSTer_TypeCheat(toggles[i].cheat);
+        }
+        was[i] = on;
+    }
+
+    if (crispy->singleplayer)
+    {
+        for (i = 0; i < arrlen(own); i++)
+        {
+            on = MiSTer_Option(own[i].bit);
+            if (on != was_own[i])
+            {
+                plyr->message = on ? own[i].on : own[i].off;
+            }
+            was_own[i] = on;
+        }
+    }
+
+    // Give All: the backpack, weapons, ammo and armor (BOOMSTIX, which takes
+    // the Sigil away: kept), all the keys (JIMMY, twice: the first half, the
+    // rest; a third time would take them away)
+    if (triggers & MISTER_TRIGGER_GIVE_ALL)
+    {
+        const boolean sigil = plyr->weaponowned[wp_sigil];
+
+        MiSTer_TypeCheat("pumpupp");
+        MiSTer_TypeCheat("boomstix");
+        plyr->weaponowned[wp_sigil] = sigil;
+        for (i = 0; i < 2 && !plyr->cards[NUMCARDS - 1]; i++)
+        {
+            MiSTer_TypeCheat("jimmy");
+        }
+        plyr->message = DEH_String(STSTR_KFAADDED);
+    }
+    // Kill All: STONECOLD, which hurts all the monsters until they are dead
+    // (typed again it stops)
+    if ((triggers & MISTER_TRIGGER_KILL_ALL) && !stonecold)
+    {
+        MiSTer_TypeCheat("stonecold");
+    }
+    if (triggers & MISTER_TRIGGER_FULL_MAP)
+    {
+        AM_MiSTerFullMap();
+    }
+    // the map after this one, as the RIFT cheat goes there
+    if ((triggers & MISTER_TRIGGER_NEXT_LEVEL) && crispy->singleplayer)
+    {
+        char rift[8];
+
+        M_snprintf(rift, sizeof(rift), "rift%02d", gamemap + 1);
+        MiSTer_TypeCheat(rift);
+    }
+}
+#endif
 
 // Respond to keyboard input events,
 //  intercept cheats.
@@ -1043,10 +1159,10 @@ void ST_drawNumFontY2(int x, int y, int num)
 void ST_drawLine(int x, int y, int len, int color)
 {
     byte putcolor = (byte)(color);
-    pixel_t *drawpos = I_VideoBuffer + (y << crispy->hires) * SCREENWIDTH + ((x + WIDESCREENDELTA) << crispy->hires);
+    pixel_t *drawpos = I_VideoBuffer + ((y + V_YDelta(y)) << crispy->hires) * SCREENWIDTH + ((x + WIDESCREENDELTA) << hiresx);
     int i = 0;
 
-    while(i < (len << crispy->hires))
+    while(i < (len << hiresx))
     {
         if (crispy->hires)
 #ifndef CRISPY_TRUECOLOR
@@ -1088,7 +1204,7 @@ static void RefreshBackground(void)
     }
 
     V_RestoreBuffer();
-    V_CopyRect(0, 0, st_backing_screen, SCREENWIDTH >> crispy->hires, ST_HEIGHT, 0, ST_Y);
+    V_CopyRect(0, 0, st_backing_screen, SCREENWIDTH >> hiresx, ST_HEIGHT, 0, ST_Y);
 }
 
 //
@@ -1119,7 +1235,7 @@ void ST_doRefresh(void)
         st_firsttime     = false;
 
         // [crispy] Status bar background in widescreen mode.
-        if ((SCREENWIDTH >> crispy->hires) != ST_WIDTH)
+        if ((SCREENWIDTH >> hiresx) != ST_WIDTH)
             RefreshBackground();
 
         // draw main status bar
@@ -1507,7 +1623,7 @@ static void ST_drawCrispyHUD(void)
     {
         int firstinventory, icon_x, i, numdrawn;
         const int max_slots =
-            (((SCREENWIDTH >> crispy->hires) >= ORIGWIDTH + ST_SLOTWIDTH) &&
+            (((SCREENWIDTH >> hiresx) >= ORIGWIDTH + ST_SLOTWIDTH) &&
              screenblocks == 13) ? 6 : 5;
         const int num_slots = MIN(plyr->numinventory, max_slots);
         const int bar_min = (ORIGWIDTH - ST_SLOTWIDTH * num_slots) / 2;
@@ -1599,6 +1715,10 @@ boolean ST_DrawExternal(void)
     // [crispy] don't draw popups for a clean screenshot
     if (!st_displaypopup || crispy->screenshot == 2)
         return false;
+
+    // MiSTer: in 240 lines the popups are centred, the bar's numbers at the
+    // HUD margins (D_Display())
+    V_SetYMode(V_Y_CENTRE);
 
     // villsa [STRIFE] added 20100926
     if(st_showobjective)

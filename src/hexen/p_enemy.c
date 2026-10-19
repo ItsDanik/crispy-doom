@@ -21,6 +21,16 @@
 #include "i_swap.h"
 #include "p_local.h"
 #include "s_sound.h"
+#ifdef MISTER_HYBRID
+#include "mister/mister_port.h"
+
+// The OSD's No Target, as Crispy Doom's NOTARGET cheat: monsters do not look
+// for the player, nor hear him
+#define NOTARGET(mo) ((mo) && (mo)->player && crispy->singleplayer \
+                      && MiSTer_Option(MISTER_OSD_NOTARGET))
+#else
+#define NOTARGET(mo) false
+#endif
 
 // Macros
 // Types
@@ -96,6 +106,8 @@ void P_RecursiveSound(sector_t * sec, int soundblocks)
 
 void P_NoiseAlert(mobj_t * target, mobj_t * emmiter)
 {
+    if (NOTARGET(target))
+        return;
     soundtarget = target;
     validcount++;
     P_RecursiveSound(emmiter->subsector->sector, 0);
@@ -573,6 +585,8 @@ boolean P_LookForPlayers(mobj_t * actor, boolean allaround)
             return false;       // done looking
 
         player = &players[actor->lastlook];
+        if (NOTARGET(player->mo))
+            continue;
         if (player->health <= 0)
             continue;           // dead
         if (!P_CheckSight(actor, player->mo))
@@ -643,6 +657,8 @@ void A_Look(mobj_t *actor, player_t *player, pspdef_t *psp)
 
     actor->threshold = 0;       // any shot will wake up
     targ = actor->subsector->sector->soundtarget;
+    if (NOTARGET(targ))
+        return;
     if (targ && (targ->flags & MF_SHOOTABLE))
     {
         actor->target = targ;

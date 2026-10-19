@@ -64,6 +64,9 @@
 #include "sounds.h"
 
 #include "v_trans.h" // [crispy] colored cheat messages
+#ifdef MISTER_HYBRID
+#include "mister/mister_port.h"
+#endif
 
 extern int screenblocks; // [crispy] for the Crispy HUD
 extern boolean inhelpscreens; // [crispy] prevent palette changes
@@ -396,6 +399,95 @@ static inline int cht_CheckCheatSP (cheatseq_t *cht, char key)
 //
 void ST_Stop(void);
 
+#ifdef MISTER_HYBRID
+// MiSTer hybrid core: the Cheats page of the core's OSD. Its cheats are typed
+// into the game's own cheat code (ST_Responder()), with the game's rules
+// (single player, not on Nightmare) and messages. An option that stays on
+// is typed when it is switched and when the player starts anew (a level, a
+// saved game, after dying); Buddha and Infinite Ammo are the port's own
+// (P_DamageMobj(), DecreaseAmmo()).
+static void MiSTer_TypeCheat(const char *cheat)
+{
+    event_t ev = {0};
+
+    ev.type = ev_keydown;
+    while (*cheat)
+    {
+        ev.data1 = ev.data2 = *cheat++;
+        ST_Responder(&ev);
+    }
+}
+
+void ST_MiSTerCheats(int triggers)
+{
+    static const struct
+    {
+        int bit;
+        int flag;
+        const char *cheat;
+    } toggles[] = {
+        { MISTER_OSD_GOD, CF_GODMODE, "iddqd" },
+        { MISTER_OSD_NOCLIP, CF_NOCLIP, "idclip" },
+        { MISTER_OSD_NOTARGET, CF_NOTARGET, "notarget" },
+    };
+    static int was[arrlen(toggles)];
+    static int buddha, infinite;
+    static mobj_t *mo;
+    boolean anew;
+    int i, on;
+
+    if (gamestate != GS_LEVEL || !plyr || !plyr->mo || demoplayback)
+    {
+        return;
+    }
+
+    anew = plyr->mo != mo;
+    mo = plyr->mo;
+    for (i = 0; i < arrlen(toggles); i++)
+    {
+        on = MiSTer_Option(toggles[i].bit);
+        if ((on != was[i] || (anew && on)) && !(plyr->cheats & toggles[i].flag) != !on)
+        {
+            MiSTer_TypeCheat(toggles[i].cheat);
+        }
+        was[i] = on;
+    }
+
+    if (crispy->singleplayer)
+    {
+        on = MiSTer_Option(MISTER_OSD_BUDDHA);
+        if (on != buddha)
+        {
+            plyr->message = on ? "Buddha Mode ON" : "Buddha Mode OFF";
+        }
+        buddha = on;
+        on = MiSTer_Option(MISTER_OSD_INFINITE_AMMO);
+        if (on != infinite)
+        {
+            plyr->message = on ? "Infinite Ammo ON" : "Infinite Ammo OFF";
+        }
+        infinite = on;
+    }
+
+    if (triggers & MISTER_TRIGGER_GIVE_ALL)
+    {
+        MiSTer_TypeCheat("idkfa");
+    }
+    if (triggers & MISTER_TRIGGER_KILL_ALL)
+    {
+        MiSTer_TypeCheat("tntem");
+    }
+    if (triggers & MISTER_TRIGGER_FULL_MAP)
+    {
+        AM_MiSTerFullMap();
+    }
+    if ((triggers & MISTER_TRIGGER_NEXT_LEVEL) && crispy->singleplayer)
+    {
+        G_ExitLevel();
+    }
+}
+#endif
+
 void ST_refreshBackground(boolean force)
 {
 
@@ -406,7 +498,7 @@ void ST_refreshBackground(boolean force)
 	// [crispy] this is our own local copy of R_FillBackScreen() to
 	// fill the entire background of st_backing_screen with the bezel pattern,
 	// so it appears to the left and right of the status bar in widescreen mode
-	if ((SCREENWIDTH >> crispy->hires) != ST_WIDTH)
+	if ((SCREENWIDTH >> hiresx) != ST_WIDTH)
 	{
 		byte *src;
 		pixel_t *dest;
@@ -460,7 +552,7 @@ void ST_refreshBackground(boolean force)
 	// to the left and right of the status bar in widescreen mode
 	if (!force)
 	{
-	    V_CopyRect(ST_X, 0, st_backing_screen, SCREENWIDTH >> crispy->hires, ST_HEIGHT, ST_X, ST_Y);
+	    V_CopyRect(ST_X, 0, st_backing_screen, SCREENWIDTH >> hiresx, ST_HEIGHT, ST_X, ST_Y);
 	}
 	else if (WIDESCREENDELTA > 0 && !st_firsttime)
 	{
@@ -2397,7 +2489,7 @@ void ST_DrawDemoTimer (const int time)
 
 	n = M_snprintf(buffer, sizeof(buffer), "%02i %05.02f", mins, secs);
 
-	x = (viewwindowx >> crispy->hires) + (scaledviewwidth >> crispy->hires) - WIDESCREENDELTA;
+	x = (viewwindowx >> hiresx) + (scaledviewwidth >> hiresx) - WIDESCREENDELTA;
 
 	// [crispy] draw the Demo Timer widget with gray numbers
 	dp_translation = cr[CR_GRAY];
