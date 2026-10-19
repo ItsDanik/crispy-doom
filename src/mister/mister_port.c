@@ -45,24 +45,24 @@ static mh_game Games[] = {
     { "doom", "Doom", DoomFiles, NULL,
       "Doom was not found. Copy DOOM.WAD (or DOOM1.WAD of the shareware) to %s/." },
     { "doom1", "Doom (Shareware)", Doom1Files, "doom", NULL },
-    { "sigil", "SIGIL", NULL, NULL,
+    { "sigil", "Doom - SIGIL", NULL, NULL,
       "SIGIL was not found. Copy SIGIL_v1_21.wad (or another version of SIGIL) "
       "and DOOM.WAD of The Ultimate Doom (Doom with four episodes) to %s/." },
-    { "sigil2", "SIGIL II", NULL, NULL,
+    { "sigil2", "Doom - SIGIL II", NULL, NULL,
       "SIGIL II was not found. Copy SIGIL_II_V1_0.WAD and DOOM.WAD of The "
       "Ultimate Doom (Doom with four episodes) to %s/." },
     { "doom2", "Doom II", Doom2Files, NULL,
       "Doom II was not found. Copy DOOM2.WAD to %s/." },
-    { "nerve", "No Rest for the Living", NerveFiles, NULL,
+    { "nerve", "Doom II - No Rest for the Living", NerveFiles, NULL,
       "No Rest for the Living was not found. Copy NERVE.WAD and DOOM2.WAD to "
       "%s/." },
-    { "master", "Master Levels", NULL, NULL,
+    { "master", "Doom II - Master Levels", NULL, NULL,
       "The Master Levels were not found. Copy MASTERLEVELS.WAD (or the 20 WADs "
       "of the Master Levels CD: ATTACK.WAD, CANYON.WAD and so on) and DOOM2.WAD to "
       "%s/." },
-    { "tnt", "TNT Evilution", TNTFiles, NULL,
+    { "tnt", "Final Doom - TNT Evilution", TNTFiles, NULL,
       "TNT: Evilution (Final Doom) was not found. Copy TNT.WAD to %s/." },
-    { "plutonia", "Plutonia Experiment", PlutoniaFiles, NULL,
+    { "plutonia", "Final Doom - Plutonia Experiment", PlutoniaFiles, NULL,
       "The Plutonia Experiment (Final Doom) was not found. Copy PLUTONIA.WAD "
       "to %s/." },
     { "heretic", "Heretic", HereticFiles, NULL,
@@ -71,7 +71,7 @@ static mh_game Games[] = {
     { "heretic1", "Heretic (Shareware)", Heretic1Files, "heretic", NULL },
     { "hexen", "Hexen", HexenFiles, NULL,
       "Hexen was not found. Copy HEXEN.WAD to %s/." },
-    { "hexdd", "Deathkings of the Dark Citadel", HexDDFiles, NULL,
+    { "hexdd", "Hexen - Deathkings", HexDDFiles, NULL,
       "Hexen: Deathkings of the Dark Citadel was not found. Copy HEXDD.WAD "
       "and HEXEN.WAD (Hexen 1.1) to %s/." },
     { "strife", "Strife", StrifeFiles, NULL,
