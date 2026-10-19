@@ -418,10 +418,148 @@ boolean WI_Responder(event_t* ev)
 }
 
 
+#ifdef MISTER_HYBRID
+#include <ctype.h>
+#include "dstrings.h"
+#include "hu_stuff.h"
+#include "v_trans.h"
+
+// MiSTer: the 20 WADs of the Master Levels CD have no title graphics (the
+// single MASTERLEVELS.WAD has its MWILV lumps), and the intermission showed
+// Doom II's: their names (those of the automap) in the HUD font instead
+static const char *const master_names[] = {
+    MHUSTR_1, MHUSTR_2, MHUSTR_3, MHUSTR_4, MHUSTR_5, MHUSTR_6, MHUSTR_7,
+    MHUSTR_8, MHUSTR_9, MHUSTR_10, MHUSTR_11, MHUSTR_12, MHUSTR_13,
+    MHUSTR_14, MHUSTR_15, MHUSTR_16, MHUSTR_17, MHUSTR_18, MHUSTR_19,
+    MHUSTR_20, MHUSTR_21,
+};
+
+// The name of map n (from 0) to draw as text, NULL for its graphic
+static const char *WI_masterName(int n)
+{
+    const char *s;
+
+    if (crispy->havemaster != (char *)-1 || wbs->epsd != 2 ||
+        n < 0 || n >= arrlen(master_names))
+    {
+        return NULL;
+    }
+
+    // without the automap's "level n: "
+    s = DEH_String(master_names[n]);
+    if (strchr(s, ':') != NULL)
+    {
+        s = strchr(s, ':') + 1;
+    }
+    while (*s == ' ')
+    {
+        s++;
+    }
+
+    return s;
+}
+
+// A copy of patch p twice as large, its columns each drawn twice
+static patch_t *WI_doublePatch(const patch_t *p)
+{
+    const post_t *post;
+    patch_t *d;
+    byte *out;
+    int w = SHORT(p->width), x, i, size = 8 + 8 * w;
+
+    for (x = 0; x < w; x++)
+    {
+        post = (const post_t *)((const byte *)p + LONG(p->columnofs[x]));
+        for (; post->topdelta != 0xff; post = (const post_t *)((const byte *)post + post->length + 4))
+        {
+            size += 4 + 2 * post->length;
+        }
+        size++;
+    }
+
+    d = Z_Malloc(size, PU_STATIC, NULL);
+    d->width = SHORT(2 * w);
+    d->height = SHORT(2 * SHORT(p->height));
+    d->leftoffset = SHORT(2 * SHORT(p->leftoffset));
+    d->topoffset = SHORT(2 * SHORT(p->topoffset));
+    out = (byte *)d + 8 + 8 * w;
+
+    for (x = 0; x < w; x++)
+    {
+        d->columnofs[2 * x] = d->columnofs[2 * x + 1] = LONG(out - (byte *)d);
+        post = (const post_t *)((const byte *)p + LONG(p->columnofs[x]));
+        for (; post->topdelta != 0xff; post = (const post_t *)((const byte *)post + post->length + 4))
+        {
+            *out++ = 2 * post->topdelta;
+            *out++ = 2 * post->length;
+            *out++ = 0;
+            for (i = 0; i < 2 * post->length; i++)
+            {
+                *out++ = ((const byte *)post)[3 + i / 2];
+            }
+            *out++ = 0;
+        }
+        *out++ = 0xff;
+    }
+
+    return d;
+}
+
+// Draws s centred at y in the HUD font, twice as large where it fits, in
+// grey like the level names of the IWAD; returns the height of a line
+static int WI_drawText(int y, const char *s)
+{
+    static patch_t *big[HU_FONTSIZE];
+    patch_t **font = big;
+    const char *p;
+    int c, x, scale = 2, w = 0;
+
+    for (p = s; *p; p++)
+    {
+        c = toupper(*p) - HU_FONTSTART;
+        w += (c < 0 || c >= HU_FONTSIZE) ? 4 : SHORT(hu_font[c]->width);
+    }
+    if (2 * w > ORIGWIDTH - 16)
+    {
+        font = hu_font;
+        scale = 1;
+    }
+
+    dp_translation = cr[CR_GRAY];
+    for (p = s, x = (ORIGWIDTH - scale * w) / 2; *p; p++)
+    {
+        c = toupper(*p) - HU_FONTSTART;
+        if (c < 0 || c >= HU_FONTSIZE)
+        {
+            x += scale * 4;
+            continue;
+        }
+        if (font[c] == NULL)
+        {
+            font[c] = WI_doublePatch(hu_font[c]);
+        }
+        V_DrawPatch(x, y, font[c]);
+        x += SHORT(font[c]->width);
+    }
+    dp_translation = NULL;
+
+    return scale * SHORT(hu_font[0]->height);
+}
+#endif
+
 // Draws "<Levelname> Finished!"
 void WI_drawLF(void)
 {
     int y = WI_TITLEY;
+
+#ifdef MISTER_HYBRID
+    if (WI_masterName(wbs->last) != NULL)
+    {
+        y += (5*WI_drawText(y, WI_masterName(wbs->last)))/4;
+        V_DrawPatch((ORIGWIDTH - SHORT(finished->width)) / 2, y, finished);
+        return;
+    }
+#endif
 
     // [crispy] prevent crashes with maps without map title graphics lump
     if (wbs->last >= num_lnames || lnames[wbs->last] == NULL)
@@ -466,6 +604,16 @@ void WI_drawLF(void)
 void WI_drawEL(void)
 {
     int y = WI_TITLEY;
+
+#ifdef MISTER_HYBRID
+    if (WI_masterName(wbs->next) != NULL)
+    {
+        V_DrawPatch((ORIGWIDTH - SHORT(entering->width))/2, y, entering);
+        y += (5*SHORT(entering->height))/4;
+        WI_drawText(y, WI_masterName(wbs->next));
+        return;
+    }
+#endif
 
     // [crispy] prevent crashes with maps without map title graphics lump
     if (wbs->next >= num_lnames || lnames[wbs->next] == NULL)
