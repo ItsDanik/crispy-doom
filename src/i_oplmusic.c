@@ -1433,6 +1433,12 @@ static void MidiOutFollow(void)
     want = MH_MidiWanted();
     if (want == midi_out)
     {
+        // the Pi switched synth or SoundFont, or its notes were reset: it
+        // has none of the song's settings
+        if (want && MH_MidiSynthChanged())
+        {
+            MidiStateSend(OPL_MiSTerAhead(), true);
+        }
         return;
     }
     if (want)
@@ -1442,6 +1448,7 @@ static void MidiOutFollow(void)
         {
             AllNotesOff(&channels[i], 0);
         }
+        MH_MidiSynthChanged();
         MidiStateSend(OPL_MiSTerAhead(), true);
     }
     else
