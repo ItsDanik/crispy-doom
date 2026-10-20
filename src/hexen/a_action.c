@@ -21,6 +21,9 @@
 #include "m_random.h"
 #include "p_local.h"
 #include "s_sound.h"
+#ifdef MISTER_HYBRID
+#include "mister/mister_port.h"
+#endif
 
 // MACROS ------------------------------------------------------------------
 
@@ -909,6 +912,13 @@ void A_Quake(mobj_t *actor, player_t *player_param, pspdef_t *psp)
             if (dist < actor->args[3])  // In tremor radius
             {
                 localQuakeHappening[playnum] = richters;
+#ifdef MISTER_HYBRID
+                // the rumble of the quake, as long as it goes on
+                if (playnum == consoleplayer && !demoplayback)
+                {
+                    MiSTer_Rumble(50 + richters * 25, 60 + richters * 20, 150);
+                }
+#endif
             }
             // Check if in damage radius
             if ((dist < actor->args[2]) && (victim->z <= victim->floorz))

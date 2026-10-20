@@ -393,6 +393,83 @@ int MiSTer_Triggers(void)
     return MH_IsOpen() ? MH_OSDTriggers() : 0;
 }
 
+// Rumble: a jolt for each motor, its strength fading out from `start` to
+// `end`; RumbleUpdate() tells the controller every frame while one goes on
+static struct {
+    int level;
+    uint64_t start, end;
+} Jolts[2];
+static int Rumbling = 0;
+
+static int JoltNow(int motor, uint64_t now)
+{
+    if (now >= Jolts[motor].end)
+        return 0;
+    return (int)(Jolts[motor].level * (Jolts[motor].end - now)
+                 / (Jolts[motor].end - Jolts[motor].start));
+}
+
+void MiSTer_Rumble(int strong, int weak, int ms)
+{
+    int levels[2] = { strong, weak };
+    uint64_t now = NowUS();
+    int motor;
+
+    if (!MH_IsOpen() || MiSTer_Option(MISTER_OSD_NO_RUMBLE) || ms <= 0)
+        return;
+    for (motor = 0; motor < 2; motor++) {
+        int level = levels[motor] > 255 ? 255 : levels[motor];
+
+        if (level > JoltNow(motor, now)) {
+            Jolts[motor].level = level;
+            Jolts[motor].start = now;
+            Jolts[motor].end = now + (uint64_t)ms * 1000;
+        }
+    }
+}
+
+void MiSTer_RumbleHit(int damage)
+{
+    if (damage > 0)
+        MiSTer_Rumble(40 + damage * 6, 80 + damage * 4,
+                      damage < 96 ? 120 + damage * 5 : 600);
+}
+
+void MiSTer_RumbleShot(int weight)
+{
+    switch (weight) {
+    case 1: MiSTer_Rumble(0, 90, 70); break;
+    case 2: MiSTer_Rumble(110, 150, 140); break;
+    case 3: MiSTer_Rumble(180, 160, 200); break;
+    case 4: MiSTer_Rumble(255, 220, 400); break;
+    }
+}
+
+void MiSTer_RumbleLand(int momz)
+{
+    int speed = -momz >> 16; // 8 .. about 40
+
+    if (speed > 8)
+        MiSTer_Rumble(60 + (speed - 8) * 12, 60,
+                      speed < 40 ? 100 + (speed - 8) * 6 : 300);
+}
+
+static void RumbleUpdate(void)
+{
+    uint64_t now = NowUS();
+    int strong, weak;
+
+    if (MiSTer_Option(MISTER_OSD_NO_RUMBLE))
+        Jolts[0].end = Jolts[1].end = 0;
+    strong = JoltNow(0, now);
+    weak = JoltNow(1, now);
+    // once a frame while it goes on (the motors stop by themselves two
+    // seconds after the last call), and once more to stop them
+    if (strong || weak || Rumbling)
+        MH_Rumble(strong, weak);
+    Rumbling = strong || weak;
+}
+
 // GAME: 1 if the game's frames take most of a field: each is drawn a field
 // ahead and the library shows it at its own field (MH_PresentAtField()), so
 // that one a little slower than a field is still in time, for one field more
@@ -414,6 +491,7 @@ unsigned MiSTer_WaitFrame(void)
 
     if (!MH_IsOpen())
         return 0;
+    RumbleUpdate();
     if (!FieldValid) {
         LastField = MH_FieldCounter();
         FieldValid = 1;
@@ -463,6 +541,8 @@ void MiSTer_ShowError(const char *message)
 
 int MiSTer_ExitCode(void)
 {
+    if (Rumbling)
+        MH_Rumble(0, 0);
     // The player loaded the core again while the game ran
     if (MH_CoreReloaded())
         return EXIT_RELOADED;

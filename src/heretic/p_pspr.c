@@ -568,6 +568,20 @@ void P_FireWeapon(player_t * player)
     {                           // Play the sound for the initial gauntlet attack
         S_StartSound(player->mo, sfx_gntuse);
     }
+#ifdef MISTER_HYBRID
+    // the rumble of the shot; the powered Phoenix Rod is a flame thrower
+    if (player == &players[consoleplayer] && !demoplayback)
+    {
+        static const int weight[NUMWEAPONS] = {
+            [wp_staff] = 1, [wp_goldwand] = 1, [wp_crossbow] = 2,
+            [wp_blaster] = 2, [wp_skullrod] = 1, [wp_phoenixrod] = 3,
+            [wp_mace] = 2, [wp_gauntlets] = 1, [wp_beak] = 0
+        };
+        MiSTer_RumbleShot(player->readyweapon == wp_phoenixrod
+                          && player->powers[pw_weaponlevel2] ? 1
+                          : weight[player->readyweapon]);
+    }
+#endif
 }
 
 //---------------------------------------------------------------------------

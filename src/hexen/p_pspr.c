@@ -481,6 +481,13 @@ void P_FireWeapon(player_t * player)
     }
     P_SetPsprite(player, ps_weapon, attackState);
     P_NoiseAlert(player->mo, player->mo);
+#ifdef MISTER_HYBRID
+    // the rumble of the shot: each class's weapons from the lightest
+    if (player == &players[consoleplayer] && !demoplayback)
+    {
+        MiSTer_RumbleShot(player->readyweapon - WP_FIRST + 1);
+    }
+#endif
 }
 
 //---------------------------------------------------------------------------

@@ -22,6 +22,9 @@
 #include "p_local.h"
 #include "sounds.h"
 #include "s_sound.h"
+#ifdef MISTER_HYBRID
+#include "mister/mister_port.h"
+#endif
 
 void G_PlayerReborn(int player);
 void P_SpawnMapThing(mapthing_t * mthing);
@@ -587,6 +590,13 @@ void P_ZMovement(mobj_t * mo)
             if (mo->player && mo->momz < -GRAVITY * 8 && !(mo->flags2 & MF2_FLY))       // squat down
             {
                 mo->player->deltaviewheight = mo->momz >> 3;
+#ifdef MISTER_HYBRID
+                // the rumble of landing hard
+                if (mo->player == &players[consoleplayer] && !demoplayback)
+                {
+                    MiSTer_RumbleLand(mo->momz);
+                }
+#endif
                 S_StartSound(mo, sfx_plroof);
                 // haleyjd: removed externdriver crap
                 mo->player->centering = true;

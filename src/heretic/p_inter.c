@@ -1478,6 +1478,11 @@ void P_DamageMobj
         {
             damage = player->health - 1;
         }
+        // the rumble of the hit
+        if (player == &players[consoleplayer] && !demoplayback)
+        {
+            MiSTer_RumbleHit(damage);
+        }
 #endif
         player->health -= damage;       // mirror mobj health here for Dave
         if (player->health < 0)

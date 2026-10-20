@@ -43,6 +43,7 @@ enum {
     MISTER_OSD_640 = 50,
     MISTER_OSD_240 = 51,
     MISTER_OSD_SOFT_FM = 26,   // FM Music: FPGA, Software
+    MISTER_OSD_NO_RUMBLE = 27, // Rumble: On, Off
     // the Cheats page
     MISTER_OSD_GOD = 32,
     MISTER_OSD_NOCLIP = 33,
@@ -87,6 +88,18 @@ int MiSTer_TimeUS(uint64_t *us);
 unsigned MiSTer_WaitFrame(void);
 // The next call starts counting anew, after the game stood still (loading)
 void MiSTer_ResetFrames(void);
+
+// Rumble (the OSD's Rumble, on by default): the gamepad's heavy and light
+// motor, 0..255, fading out over `ms`. Jolts that come together take the
+// stronger of each motor. For the player's own hits, shots and landings only:
+// the game calls these for its console player and not in demos
+void MiSTer_Rumble(int strong, int weak, int ms);
+// A hit of `damage` health (after the armour), a jolt as strong as the hit
+void MiSTer_RumbleHit(int damage);
+// A shot of a weapon of weight 1 (pistol) .. 4 (BFG)
+void MiSTer_RumbleShot(int weight);
+// Landing hard: the player's momz at the ground (fixed point, < -8.0)
+void MiSTer_RumbleLand(int momz);
 
 // HUD margins (hybrid/README.md, "HUD margins"): where the HUD goes on a
 // screen of `height` lines (240, or 480: the margins are doubled), as the

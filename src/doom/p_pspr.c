@@ -294,6 +294,18 @@ void P_FireWeapon (player_t* player)
     newstate = weaponinfo[player->readyweapon].atkstate;
     P_SetPsprite (player, ps_weapon, newstate);
     P_NoiseAlert (player->mo, player->mo);
+#ifdef MISTER_HYBRID
+    // the rumble of the shot (the BFG's when it goes off, in A_FireBFG)
+    if (player == &players[consoleplayer] && !demoplayback)
+    {
+        static const int weight[NUMWEAPONS] = {
+            [wp_fist] = 1, [wp_pistol] = 1, [wp_shotgun] = 2,
+            [wp_chaingun] = 1, [wp_missile] = 3, [wp_plasma] = 1,
+            [wp_bfg] = 0, [wp_chainsaw] = 1, [wp_supershotgun] = 3
+        };
+        MiSTer_RumbleShot(weight[player->readyweapon]);
+    }
+#endif
 }
 
 
@@ -660,6 +672,12 @@ A_FireBFG
     DecreaseAmmo(player, weaponinfo[player->readyweapon].ammo, 
                  deh_bfg_cells_per_shot);
     P_SpawnPlayerMissile (player->mo, MT_BFG);
+#ifdef MISTER_HYBRID
+    if (player == &players[consoleplayer] && !demoplayback)
+    {
+        MiSTer_RumbleShot(4);
+    }
+#endif
 }
 
 

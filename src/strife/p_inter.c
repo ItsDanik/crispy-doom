@@ -1313,6 +1313,11 @@ void P_DamageMobj(mobj_t* target, mobj_t* inflictor, mobj_t* source, int damage)
         {
             damage = player->health - 1;
         }
+        // the rumble of the hit
+        if (player == &players[consoleplayer] && !demoplayback)
+        {
+            MiSTer_RumbleHit(damage);
+        }
 #endif
         player->health -= damage;   // mirror mobj health here for Dave
         

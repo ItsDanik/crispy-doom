@@ -239,6 +239,19 @@ void P_FireWeapon (player_t* player)
     // villsa [STRIFE] exclude these weapons from causing noise
     if(player->readyweapon > wp_elecbow && player->readyweapon != wp_poisonbow)
         P_NoiseAlert (player->mo, player->mo);
+#ifdef MISTER_HYBRID
+    // the rumble of the shot
+    if (player == &players[consoleplayer] && !demoplayback)
+    {
+        static const int weight[NUMWEAPONS] = {
+            [wp_fist] = 1, [wp_elecbow] = 1, [wp_rifle] = 1,
+            [wp_missile] = 3, [wp_hegrenade] = 2, [wp_flame] = 1,
+            [wp_mauler] = 3, [wp_sigil] = 4, [wp_poisonbow] = 1,
+            [wp_wpgrenade] = 2, [wp_torpedo] = 4
+        };
+        MiSTer_RumbleShot(weight[player->readyweapon]);
+    }
+#endif
 }
 
 

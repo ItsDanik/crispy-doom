@@ -23,6 +23,9 @@
 #include "p_local.h"
 #include "s_sound.h"
 #include "sounds.h"
+#ifdef MISTER_HYBRID
+#include "mister/mister_port.h"
+#endif
 
 // MACROS ------------------------------------------------------------------
 
@@ -797,6 +800,13 @@ void P_ZMovement(mobj_t * mo)
                 if (mo->momz < -GRAVITY * 8 && !(mo->flags2 & MF2_FLY))
                 {               // squat down
                     mo->player->deltaviewheight = mo->momz >> 3;
+#ifdef MISTER_HYBRID
+                    // the rumble of landing hard
+                    if (mo->player == &players[consoleplayer] && !demoplayback)
+                    {
+                        MiSTer_RumbleLand(mo->momz);
+                    }
+#endif
                     if (mo->momz < -23 * FRACUNIT)
                     {
                         P_FallingDamage(mo->player);
@@ -1018,6 +1028,13 @@ void P_BlasterMobjThinker(thinker_t *thinker)
 static void PlayerLandedOnThing(mobj_t * mo, mobj_t * onmobj)
 {
     mo->player->deltaviewheight = mo->momz >> 3;
+#ifdef MISTER_HYBRID
+    // the rumble of landing hard
+    if (mo->player == &players[consoleplayer] && !demoplayback)
+    {
+        MiSTer_RumbleLand(mo->momz);
+    }
+#endif
     if (mo->momz < -23 * FRACUNIT)
     {
         P_FallingDamage(mo->player);

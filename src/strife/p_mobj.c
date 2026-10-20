@@ -29,6 +29,9 @@
 #include "s_sound.h"
 #include "doomstat.h"
 #include "d_main.h"     // villsa [STRIFE]
+#ifdef MISTER_HYBRID
+#include "mister/mister_port.h"
+#endif
 
 
 void G_PlayerReborn (int player);
@@ -363,6 +366,13 @@ void P_ZMovement (mobj_t* mo)
                 // after hitting the ground (hard),
                 // and utter appropriate sound.
                 mo->player->deltaviewheight = mo->momz>>3;
+#ifdef MISTER_HYBRID
+                // the rumble of landing hard
+                if (mo->player == &players[consoleplayer] && !demoplayback)
+                {
+                    MiSTer_RumbleLand(mo->momz);
+                }
+#endif
 
                 // villsa [STRIFE] fall damage
                 // haleyjd 09/18/10: Repaired calculation
