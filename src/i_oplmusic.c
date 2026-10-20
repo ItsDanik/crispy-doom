@@ -1737,6 +1737,15 @@ static boolean I_OPL_InitMusic(void)
         dmxoption = snd_dmxoption != NULL ? snd_dmxoption : "";
     }
 
+#ifdef MISTER_HYBRID
+    // MiSTer: the core's FM chip is an OPL2. With "-opl3" (Crispy's default,
+    // also in the config files it wrote) half the notes went to the second
+    // bank of voices an OPL3 has, and were not heard: the music as DMX made
+    // it for an AdLib, 9 voices, on the software chip as well (opl_sdl.c),
+    // which the OSD switches to while the music plays
+    chip_type = OPL_INIT_OPL2;
+#endif
+
     if (chip_type == OPL_INIT_OPL3 && strstr(dmxoption, "-opl3") != NULL)
     {
         opl_opl3mode = 1;
