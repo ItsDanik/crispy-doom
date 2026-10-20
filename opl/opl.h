@@ -132,6 +132,11 @@ void OPL_AdjustCallbacks(float factor);
 
 void OPL_ClearCallbacks(void);
 
+#ifdef MISTER_HYBRID
+// MiSTer: the audio frame of the next block an OPL callback is at
+int OPL_MiSTerAhead(void);
+#endif
+
 // Begin critical section, during which, OPL callbacks will not be
 // invoked.
 

@@ -329,6 +329,24 @@ static int num_opl_voices;
 
 static opl_channel_data_t channels[MIDI_CHANNELS_PER_TRACK];
 
+#ifdef MISTER_HYBRID
+// MiSTer: the music as MIDI, to an MT32-pi on the core's user port, while
+// one is connected and the OSD has it on (MH_MidiWanted()). The song's
+// events go to it as they are, each at its place in the audio buffer
+// (OPL_MiSTerAhead()), and the OPL voices are not played. Followed at every
+// event, so the OSD switches between the two while the music plays: the
+// channels' state is kept for both, the MIDI one in midi_state (by MIDI
+// channel; -1 not set by the song).
+#include <mister_hybrid.h>
+
+// the MT32-pi's sound at full music volume (MH_MidiVolume(): 32 as it comes)
+#define MIDI_FULL_VOLUME 32
+
+static boolean midi_out;
+static const byte midi_state_cc[] = { 0, 1, 7, 10, 11, 64, 91, 93 };
+static int midi_state[MIDI_CHANNELS_PER_TRACK][arrlen(midi_state_cc) + 2];
+#endif
+
 // Track data for playing tracks:
 
 static opl_track_data_t *tracks;
@@ -637,6 +655,10 @@ static void SetChannelVolume(opl_channel_data_t *channel, unsigned int volume,
 static void I_OPL_SetMusicVolume(int volume)
 {
     unsigned int i;
+
+#ifdef MISTER_HYBRID
+    MH_MidiVolume(volume * MIDI_FULL_VOLUME / 127);
+#endif
 
     if (current_music_volume == volume)
     {
@@ -1311,10 +1333,179 @@ static void MetaEvent(opl_track_data_t *track, midi_event_t *event)
     }
 }
 
+#ifdef MISTER_HYBRID
+// The channels' state for a switch to MIDI: program, controllers, pitch bend
+static void MidiStateReset(void)
+{
+    memset(midi_state, 0xff, sizeof(midi_state));
+}
+
+static void MidiStateEvent(midi_event_t *event)
+{
+    int *state = midi_state[event->data.channel.channel];
+    unsigned int i;
+
+    switch (event->event_type)
+    {
+        case MIDI_EVENT_PROGRAM_CHANGE:
+            state[arrlen(midi_state_cc)] = event->data.channel.param1;
+            break;
+
+        case MIDI_EVENT_PITCH_BEND:
+            state[arrlen(midi_state_cc) + 1] = event->data.channel.param1
+                                             | (event->data.channel.param2 << 7);
+            break;
+
+        case MIDI_EVENT_CONTROLLER:
+            if (event->data.channel.param1 == MIDI_CONTROLLER_RESET_ALL_CTRLS)
+            {
+                // all but the volume, pan, bank and effects' sends
+                state[1] = state[4] = state[5] = -1;
+                state[arrlen(midi_state_cc) + 1] = -1;
+            }
+            for (i = 0; i < arrlen(midi_state_cc); ++i)
+            {
+                if (event->data.channel.param1 == midi_state_cc[i])
+                {
+                    state[i] = event->data.channel.param2;
+                }
+            }
+            break;
+
+        default:
+            break;
+    }
+}
+
+// The MT32-pi is told what the song has set so far: after a reset of all
+// its sound (`full`, a new song or the switch to it), or with the notes
+// left to end (the song starting over)
+static void MidiStateSend(int ahead, boolean full)
+{
+    // General MIDI on: whatever ran before on the Pi
+    static const byte gm_on[] = { 0x7e, 0x7f, 0x09, 0x01 };
+    unsigned int ch, i;
+    int *state, bend;
+
+    if (full)
+    {
+        MH_MidiReset(ahead);
+        MH_MidiSysEx(ahead, gm_on, sizeof(gm_on));
+    }
+    for (ch = 0; ch < MIDI_CHANNELS_PER_TRACK; ++ch)
+    {
+        state = midi_state[ch];
+        if (!full)
+        {
+            MH_MidiEvent(ahead, MIDI_EVENT_CONTROLLER | ch, MIDI_CONTROLLER_RESET_ALL_CTRLS, 0);
+        }
+        // DMX's start: volume 100, the middle (InitChannel())
+        MH_MidiEvent(ahead, MIDI_EVENT_CONTROLLER | ch, MIDI_CONTROLLER_VOLUME_MSB,
+                     state[2] >= 0 ? state[2] : 100);
+        MH_MidiEvent(ahead, MIDI_EVENT_CONTROLLER | ch, MIDI_CONTROLLER_PAN,
+                     state[3] >= 0 ? state[3] : 64);
+        for (i = 0; i < arrlen(midi_state_cc); ++i)
+        {
+            if (state[i] >= 0 && i != 2 && i != 3)
+            {
+                MH_MidiEvent(ahead, MIDI_EVENT_CONTROLLER | ch, midi_state_cc[i], state[i]);
+            }
+        }
+        MH_MidiEvent(ahead, MIDI_EVENT_PROGRAM_CHANGE | ch,
+                     state[arrlen(midi_state_cc)] >= 0 ? state[arrlen(midi_state_cc)] : 0, 0);
+        bend = state[arrlen(midi_state_cc) + 1] >= 0 ? state[arrlen(midi_state_cc) + 1] : 0x2000;
+        MH_MidiEvent(ahead, MIDI_EVENT_PITCH_BEND | ch, bend & 0x7f, bend >> 7);
+    }
+}
+
+// Where the music goes, as the OSD and the MT32-pi say
+static void MidiOutFollow(void)
+{
+    boolean want;
+    unsigned int i;
+
+    if (!MH_MidiAvailable())
+    {
+        return;
+    }
+    // once the audio is there; nothing if it already is
+    MH_MidiEnable(1);
+    want = MH_MidiWanted();
+    if (want == midi_out)
+    {
+        return;
+    }
+    if (want)
+    {
+        // the notes from now on on the MT32-pi
+        for (i = 0; i < MIDI_CHANNELS_PER_TRACK; ++i)
+        {
+            AllNotesOff(&channels[i], 0);
+        }
+        MidiStateSend(OPL_MiSTerAhead(), true);
+    }
+    else
+    {
+        MH_MidiReset(OPL_MiSTerAhead());
+    }
+    midi_out = want;
+}
+
+// An event to the MT32-pi; true if the OPL voices have nothing to do with it
+static boolean MidiOutEvent(midi_event_t *event)
+{
+    unsigned int length;
+
+    switch (event->event_type)
+    {
+        case MIDI_EVENT_NOTE_OFF:
+        case MIDI_EVENT_NOTE_ON:
+        case MIDI_EVENT_AFTERTOUCH:
+        case MIDI_EVENT_CHAN_AFTERTOUCH:
+            MH_MidiEvent(OPL_MiSTerAhead(), event->event_type | event->data.channel.channel,
+                         event->data.channel.param1, event->data.channel.param2);
+            return true;
+
+        // the OPL channels follow these as well
+        case MIDI_EVENT_CONTROLLER:
+        case MIDI_EVENT_PROGRAM_CHANGE:
+        case MIDI_EVENT_PITCH_BEND:
+            MH_MidiEvent(OPL_MiSTerAhead(), event->event_type | event->data.channel.channel,
+                         event->data.channel.param1, event->data.channel.param2);
+            return false;
+
+        // its data without the F7 at its end
+        case MIDI_EVENT_SYSEX:
+            length = event->data.sysex.length;
+            if (length > 0 && event->data.sysex.data[length - 1] == 0xf7)
+            {
+                --length;
+            }
+            MH_MidiSysEx(OPL_MiSTerAhead(), event->data.sysex.data, length);
+            return true;
+
+        default:
+            return false;
+    }
+}
+#endif
+
 // Process a MIDI event from a track.
 
 static void ProcessEvent(opl_track_data_t *track, midi_event_t *event)
 {
+#ifdef MISTER_HYBRID
+    MidiOutFollow();
+    if (event->event_type >= MIDI_EVENT_NOTE_OFF && event->event_type < MIDI_EVENT_SYSEX)
+    {
+        MidiStateEvent(event);
+    }
+    if (midi_out && MidiOutEvent(event))
+    {
+        return;
+    }
+#endif
+
     switch (event->event_type)
     {
         case MIDI_EVENT_NOTE_OFF:
@@ -1378,6 +1569,14 @@ static void RestartSong(void *unused)
     {
         InitChannel(&channels[i]);
     }
+
+#ifdef MISTER_HYBRID
+    MidiStateReset();
+    if (midi_out)
+    {
+        MidiStateSend(OPL_MiSTerAhead(), false);
+    }
+#endif
 }
 
 // Callback function invoked when another event needs to be read from
@@ -1512,6 +1711,14 @@ static void I_OPL_PlaySong(void *handle, boolean looping)
         InitChannel(&channels[i]);
     }
 
+#ifdef MISTER_HYBRID
+    MidiStateReset();
+    if (midi_out)
+    {
+        MidiStateSend(0, true);
+    }
+#endif
+
     // If the music was previously paused, it needs to be unpaused; playing
     // a new song implies that we turn off pause. This matches vanilla
     // behavior of the DMX library, and some of the higher-level code in
@@ -1543,6 +1750,22 @@ static void I_OPL_PauseSong(void)
             VoiceKeyOff(&voices[i]);
         }
     }
+
+#ifdef MISTER_HYBRID
+    // on the MT32-pi the same: the notes but the drums' (an MT-32 knows
+    // only All Notes Off)
+    if (midi_out)
+    {
+        for (i = 0; i < MIDI_CHANNELS_PER_TRACK; ++i)
+        {
+            if (i != 9)
+            {
+                MH_MidiEvent(0, MIDI_EVENT_CONTROLLER | i, MIDI_CONTROLLER_ALL_SOUND_OFF, 0);
+                MH_MidiEvent(0, MIDI_EVENT_CONTROLLER | i, MIDI_CONTROLLER_ALL_NOTES_OFF, 0);
+            }
+        }
+    }
+#endif
 }
 
 static void I_OPL_ResumeSong(void)
@@ -1576,6 +1799,13 @@ static void I_OPL_StopSong(void)
     {
         AllNotesOff(&channels[i], 0);
     }
+
+#ifdef MISTER_HYBRID
+    if (midi_out)
+    {
+        MH_MidiReset(0);
+    }
+#endif
 
     // Free all track data.
 
@@ -1702,6 +1932,12 @@ static void I_OPL_ShutdownMusic(void)
         // Stop currently-playing track, if there is one:
 
         I_OPL_StopSong();
+
+#ifdef MISTER_HYBRID
+        // the core tells the MT32-pi to stop its notes
+        MH_MidiEnable(0);
+        midi_out = false;
+#endif
 
         OPL_Shutdown();
 

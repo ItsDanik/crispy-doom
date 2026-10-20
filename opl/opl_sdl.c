@@ -222,6 +222,15 @@ static void FMFollowOption(void)
 }
 #endif
 
+#ifdef MISTER_HYBRID
+// The audio frame of the next block that the callback being run is at (the
+// `ahead` of MH_FMWrite() and MH_MidiEvent()); 0 outside the audio thread
+int OPL_MiSTerAhead(void)
+{
+    return SDL_ThreadID() == fm_audio_thread ? fm_ahead : 0;
+}
+#endif
+
 // Call the OPL emulator code to fill the specified buffer.
 
 static void FillBuffer(uint8_t *buffer, unsigned int nsamples)
