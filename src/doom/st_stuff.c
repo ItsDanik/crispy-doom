@@ -488,11 +488,60 @@ void ST_MiSTerCheats(int triggers)
 }
 #endif
 
+#ifdef MISTER_HYBRID
+// MiSTer: in 240 lines the status bar is drawn over the view every frame, and
+// so was its background into st_backing_screen, 5% of the frame time at
+// 640x240; it is drawn there now only when something it is made of has
+// changed, and copied to the screen every time
+static boolean ST_BackgroundChanged(void)
+{
+    static struct
+    {
+	boolean valid;
+	patch_t *sbar, *sbarr, *armsbg, *face;
+	int width, height, hires, hiresx, delta, viewwidth, mode;
+	boolean deathmatch, netgame;
+    } drawn;
+    patch_t *const face = netgame ? faceback[displayplayer] : NULL;
+
+    if (drawn.valid && !dp_translucent && !dp_translation &&
+	drawn.sbar == sbar && drawn.sbarr == sbarr && drawn.armsbg == armsbg &&
+	drawn.face == face && drawn.width == SCREENWIDTH &&
+	drawn.height == SCREENHEIGHT && drawn.hires == crispy->hires &&
+	drawn.hiresx == hiresx && drawn.delta == WIDESCREENDELTA &&
+	drawn.viewwidth == scaledviewwidth && drawn.mode == gamemode &&
+	drawn.deathmatch == !!deathmatch && drawn.netgame == !!netgame)
+    {
+	return false;
+    }
+    // a translucent or translated background would depend on what was there
+    drawn.valid = !dp_translucent && !dp_translation;
+    drawn.sbar = sbar;
+    drawn.sbarr = sbarr;
+    drawn.armsbg = armsbg;
+    drawn.face = face;
+    drawn.width = SCREENWIDTH;
+    drawn.height = SCREENHEIGHT;
+    drawn.hires = crispy->hires;
+    drawn.hiresx = hiresx;
+    drawn.delta = WIDESCREENDELTA;
+    drawn.viewwidth = scaledviewwidth;
+    drawn.mode = gamemode;
+    drawn.deathmatch = !!deathmatch;
+    drawn.netgame = !!netgame;
+    return true;
+}
+#endif
+
 void ST_refreshBackground(boolean force)
 {
 
     if (st_classicstatusbar || force)
     {
+#ifdef MISTER_HYBRID
+      if (ST_BackgroundChanged())
+      {
+#endif
         V_UseBuffer(st_backing_screen);
 
 	// [crispy] this is our own local copy of R_FillBackScreen() to
@@ -547,6 +596,9 @@ void ST_refreshBackground(boolean force)
 	    V_DrawPatch(ST_FX, 0, faceback[displayplayer]);
 
         V_RestoreBuffer();
+#ifdef MISTER_HYBRID
+      }
+#endif
 
 	// [crispy] copy entire SCREENWIDTH, to preserve the pattern
 	// to the left and right of the status bar in widescreen mode

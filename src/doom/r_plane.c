@@ -162,7 +162,14 @@ R_MapPlane
 	// horizontal one): or the floor slides against the walls when turning
 	if (projectiony != projection)
 	{
-	    const fixed_t ratio = FixedDiv(projectiony, projection);
+	    static fixed_t ratio, ratio_x, ratio_y; // the same for every row
+
+	    if (ratio_x != projection || ratio_y != projectiony)
+	    {
+		ratio = FixedDiv(projectiony, projection);
+		ratio_x = projection;
+		ratio_y = projectiony;
+	    }
 	    ds_xstep = cachedxstep[y] = FixedMul(ds_xstep, ratio);
 	    ds_ystep = cachedystep[y] = FixedMul(ds_ystep, ratio);
 	}

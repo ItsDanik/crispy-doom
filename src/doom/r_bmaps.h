@@ -31,4 +31,9 @@ extern const byte *(*R_BrightmapForState) (const int state);
 
 extern const byte **texturebrightmap;
 
+#ifdef MISTER_HYBRID
+// a texture without a brightmap has this one (all 0: colormap 0)
+extern const byte nobrightmap[256];
+#endif
+
 #endif

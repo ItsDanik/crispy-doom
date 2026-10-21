@@ -109,6 +109,7 @@ int			dccount;
 // [crispy] replace R_DrawColumn() with Lee Killough's implementation
 // found in MBF to fix Tutti-Frutti, taken from mbfsrc/R_DRAW.C:99-1979
 
+#ifndef MISTER_HYBRID
 void R_DrawColumn (void) 
 { 
     int			count; 
@@ -179,6 +180,77 @@ void R_DrawColumn (void)
     } while (count--); 
   }
 } 
+
+#else
+// MiSTer: the same pixels, faster on the ARM.
+// The globals in locals: a pixel written through dest could be any of them,
+// so the compiler read them all again for every pixel. 4 pixels a turn.
+void R_DrawColumn(void)
+{
+    const lighttable_t *const colormap = dc_colormap;
+    const byte *const source = dc_source;
+    const int pitch = SCREENWIDTH;
+    int count = dc_yh - dc_yl + 1;
+    int heightmask = dc_texheight - 1;
+    pixel_t *dest;
+    fixed_t frac;
+    fixed_t fracstep;
+
+    if (count <= 0)
+        return;
+
+#ifdef RANGECHECK
+    if ((unsigned) dc_x >= SCREENWIDTH || dc_yl < 0 || dc_yh >= SCREENHEIGHT)
+        I_Error("R_DrawColumn: %i to %i at %i", dc_yl, dc_yh, dc_x);
+#endif
+
+    dest = ylookup[dc_yl] + columnofs[dc_x];
+    fracstep = dc_iscale;
+    frac = dc_texturemid + (dc_yl - centery) * fracstep;
+
+    if (dc_texheight & heightmask) // not a power of 2 -- killough
+    {
+        heightmask++;
+        heightmask <<= FRACBITS;
+
+        if (frac < 0)
+            while ((frac += heightmask) < 0);
+        else
+            while (frac >= heightmask)
+                frac -= heightmask;
+
+        do
+        {
+            *dest = colormap[source[frac >> FRACBITS]];
+            dest += pitch;
+            if ((frac += fracstep) >= heightmask)
+                frac -= heightmask;
+        } while (--count);
+    }
+    else
+    {
+        while (count >= 4)
+        {
+            dest[0] = colormap[source[(frac >> FRACBITS) & heightmask]];
+            frac += fracstep;
+            dest[pitch] = colormap[source[(frac >> FRACBITS) & heightmask]];
+            frac += fracstep;
+            dest[pitch * 2] = colormap[source[(frac >> FRACBITS) & heightmask]];
+            frac += fracstep;
+            dest[pitch * 3] = colormap[source[(frac >> FRACBITS) & heightmask]];
+            frac += fracstep;
+            dest += pitch * 4;
+            count -= 4;
+        }
+        while (count--)
+        {
+            *dest = colormap[source[(frac >> FRACBITS) & heightmask]];
+            dest += pitch;
+            frac += fracstep;
+        }
+    }
+}
+#endif
 
 
 
@@ -642,6 +714,7 @@ int			dscount;
 
 //
 // Draws the actual span.
+#ifndef MISTER_HYBRID
 void R_DrawSpan (void) 
 { 
 //  unsigned int position, step;
@@ -697,6 +770,55 @@ void R_DrawSpan (void)
 
     } while (count--);
 }
+
+#else
+// MiSTer: the same pixels, faster on the ARM.
+// As R_DrawColumn(): the globals in locals, 4 pixels a turn
+void R_DrawSpan(void)
+{
+    const lighttable_t *const colormap = ds_colormap;
+    const byte *const source = ds_source;
+    unsigned int xfrac = ds_xfrac;
+    unsigned int yfrac = ds_yfrac;
+    const unsigned int xstep = ds_xstep;
+    const unsigned int ystep = ds_ystep;
+    int count = ds_x2 - ds_x1 + 1;
+    pixel_t *dest;
+
+#ifdef RANGECHECK
+    if (ds_x2 < ds_x1 || ds_x1 < 0 || ds_x2 >= SCREENWIDTH
+        || (unsigned) ds_y > SCREENHEIGHT)
+        I_Error("R_DrawSpan: %i to %i at %i", ds_x1, ds_x2, ds_y);
+#endif
+
+    dest = ylookup[ds_y] + columnofs[ds_x1];
+
+    // as the original, which left them after the span
+    ds_xfrac += xstep * count;
+    ds_yfrac += ystep * count;
+
+#define SPANPIXEL(i) \
+        dest[i] = colormap[source[((yfrac >> 10) & 0x0fc0) | ((xfrac >> 16) & 0x3f)]]; \
+        xfrac += xstep; \
+        yfrac += ystep
+
+    while (count >= 4)
+    {
+        SPANPIXEL(0);
+        SPANPIXEL(1);
+        SPANPIXEL(2);
+        SPANPIXEL(3);
+        dest += 4;
+        count -= 4;
+    }
+    while (count-- > 0)
+    {
+        SPANPIXEL(0);
+        dest++;
+    }
+#undef SPANPIXEL
+}
+#endif
 
 
 

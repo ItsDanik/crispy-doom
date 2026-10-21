@@ -300,6 +300,9 @@ void V_DrawPatch(int x, int y, patch_t *patch)
 
     // [crispy] four different rendering functions
     drawpatchpx_t *const drawpatchpx = drawpatchpx_a[!dp_translucent][!dp_translation];
+#ifdef MISTER_HYBRID
+    const int pitch = SCREENWIDTH;
+#endif
 
     y -= SHORT(patch->topoffset);
     x -= SHORT(patch->leftoffset);
@@ -383,6 +386,38 @@ void V_DrawPatch(int x, int y, patch_t *patch)
                 break;
             }
 
+#ifdef MISTER_HYBRID
+            // MiSTer: the same pixels, without a call per pixel for an opaque
+            // patch in its own colours (most; in 240 lines the status bar is
+            // drawn every frame), and the rows above the screen skipped at
+            // once
+            if (top < 0)
+            {
+                const int skip = count < -top ? count : -top;
+
+                srccol += skip * dyi;
+                dest += skip * pitch;
+                count -= skip;
+            }
+            if (drawpatchpx == drawpatchpx00)
+            {
+                while (count-- > 0)
+                {
+                    *dest = source[srccol >> FRACBITS];
+                    srccol += dyi;
+                    dest += pitch;
+                }
+            }
+            else
+            {
+                while (count-- > 0)
+                {
+                    *dest = drawpatchpx(*dest, source[srccol >> FRACBITS]);
+                    srccol += dyi;
+                    dest += pitch;
+                }
+            }
+#else
             while (count--)
             {
                 // [crispy] too high
@@ -393,6 +428,7 @@ void V_DrawPatch(int x, int y, patch_t *patch)
                 srccol += dyi;
                 dest += SCREENWIDTH;
             }
+#endif
             column = (column_t *)((byte *)column + column->length + 4);
         }
     }

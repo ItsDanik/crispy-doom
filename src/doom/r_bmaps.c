@@ -26,7 +26,11 @@
 
 // [crispy] brightmap data
 
+#ifdef MISTER_HYBRID
+const byte nobrightmap[256] = {0}; // MiSTer: r_draw.c knows it
+#else
 static const byte nobrightmap[256] = {0};
+#endif
 
 static const byte notgray[256] =
 {

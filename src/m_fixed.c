@@ -44,6 +44,35 @@ FixedMul
 // FixedDiv, C version.
 //
 
+#ifdef MISTER_HYBRID
+// MiSTer: the ARM has no division instruction, and the C library's 64-bit
+// one took 5% of the frame time at 640x240 (R_MapPlane() divides for every
+// row of a floor). The VFP divides doubles: a << 16 is exact in one, and the
+// quotient rounded to a double is at most 2^-22 from the true one, so its
+// whole part is the true quotient's, or one further from 0 when that is
+// just below a whole number: the remainder says which.
+fixed_t FixedDiv(fixed_t a, fixed_t b)
+{
+    if ((abs(a) >> 14) >= abs(b))
+    {
+	return (a^b) < 0 ? INT_MIN : INT_MAX;
+    }
+    else
+    {
+	const int64_t n = (int64_t) a * FRACUNIT;
+	int q = (int) ((double) a * FRACUNIT / b);
+	const int64_t r = n - (int64_t) q * b;
+
+	// the C quotient's remainder has n's sign (or is 0)
+	if (r != 0 && (r < 0) != (n < 0))
+	{
+	    q += q > 0 ? -1 : 1;
+	}
+
+	return q;
+    }
+}
+#else
 fixed_t FixedDiv(fixed_t a, fixed_t b)
 {
     if ((abs(a) >> 14) >= abs(b))
@@ -59,4 +88,5 @@ fixed_t FixedDiv(fixed_t a, fixed_t b)
 	return (fixed_t) result;
     }
 }
+#endif
 

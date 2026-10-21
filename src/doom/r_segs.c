@@ -184,6 +184,26 @@ void R_FixWiggle (sector_t *sector)
     }
 }
 
+#ifdef MISTER_HYBRID
+// MiSTer: 0xffffffff / scale for every column, without the C library's
+// division (none on the ARM): the VFP's quotient, one too big at most, as
+// FixedDiv() in m_fixed.c
+static inline unsigned int R_InvScale(unsigned int scale)
+{
+    unsigned int q = (unsigned int) (4294967295.0 / scale);
+
+    if ((uint64_t) q * scale > 0xffffffffu)
+    {
+	q--;
+    }
+
+    return q;
+}
+#define R_INVSCALE(scale) R_InvScale((unsigned)(scale))
+#else
+#define R_INVSCALE(scale) (0xffffffffu / (unsigned)(scale))
+#endif
+
 //
 // R_RenderMaskedSegRange
 //
@@ -295,7 +315,7 @@ R_RenderMaskedSegRange
 		sprtopscreen = (int64_t)(t >> FRACBITS); // [crispy] WiggleFix
 	    }
 
-	    dc_iscale = 0xffffffffu / (unsigned)spryscale;
+	    dc_iscale = R_INVSCALE(spryscale);
 	    
 	    // draw the texture
 	    col = (column_t *)( 
@@ -393,7 +413,7 @@ void R_RenderSegLoop (void)
 	    dc_colormap[0] = walllights[index];
 	    dc_colormap[1] = (!fixedcolormap && (crispy->brightmaps & BRIGHTMAPS_TEXTURES)) ? colormaps : dc_colormap[0];
 	    dc_x = rw_x;
-	    dc_iscale = 0xffffffffu / (unsigned)rw_scale;
+	    dc_iscale = R_INVSCALE(rw_scale);
 	}
         else
         {

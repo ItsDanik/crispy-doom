@@ -62,6 +62,38 @@ int SlopeDiv(unsigned int num, unsigned int den)
 }
 
 // [crispy] catch SlopeDiv overflows, only used in rendering
+#ifdef MISTER_HYBRID
+// MiSTer: without the C library's 64-bit division (no division instruction
+// on the ARM; R_CheckBBox() comes here for every node), as FixedDiv() in
+// m_fixed.c: the VFP's quotient, one too big at most, and corrected
+int SlopeDivCrispy(unsigned int num, unsigned int den)
+{
+    if (den < 512)
+    {
+	return SLOPERANGE;
+    }
+    else
+    {
+	const unsigned int d = den >> 8;
+	const uint64_t n = (uint64_t) num << 3;
+	unsigned int ans;
+
+	if (n >= (uint64_t) (SLOPERANGE + 1) * d)
+	{
+	    return SLOPERANGE;
+	}
+
+	ans = (unsigned int) ((double) num * 8 / d);
+
+	if ((uint64_t) ans * d > n)
+	{
+	    ans--;
+	}
+
+	return (int) ans;
+    }
+}
+#else
 int SlopeDivCrispy(unsigned int num, unsigned int den)
 {
     if (den < 512)
@@ -82,6 +114,7 @@ int SlopeDivCrispy(unsigned int num, unsigned int den)
 	}
     }
 }
+#endif
 
 const fixed_t finetangent[4096] =
 {
