@@ -50,6 +50,9 @@
 #include "dstrings.h"
 
 #include "am_map.h"
+#ifdef MISTER_HYBRID
+#include "i_joystick.h"
+#endif
 extern boolean inhelpscreens; // [crispy]
 
 
@@ -932,8 +935,15 @@ AM_Responder
 
     rc = false;
 
+#ifdef MISTER_HYBRID
+    // the joystick polls at every tic: a press of the button, not the
+    // button held (the map went on and off while it was)
+    if (ev->type == ev_joystick && joybautomap >= 0
+        && (mister_joy_pressed & (1u << joybautomap)) != 0)
+#else
     if (ev->type == ev_joystick && joybautomap >= 0
         && (ev->data1 & (1 << joybautomap)) != 0)
+#endif
     {
         joywait = I_GetTime() + 5;
 
