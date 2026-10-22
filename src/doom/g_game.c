@@ -704,7 +704,17 @@ void G_BuildTiccmd (ticcmd_t* cmd, int maketic)
             {
                 joylook = joylook * joystick_look_sensitivity / 10;
                 joylook = BETWEEN(-FRACUNIT, FRACUNIT, joylook);
+#ifdef MISTER_HYBRID
+                // [MiSTer] as far down as up: FixedMul() rounds towards minus
+                // infinity and the stick reaches -FRACUNIT up but FRACUNIT - 2
+                // down, so a full tilt looked up 2 a tic and down 1, and down
+                // not at all below half; up as before, down the same
+                look = (2 * (joylook < 0 ? -joylook : joylook) + FRACUNIT - 1) >> FRACBITS;
+                if (joylook > 0)
+                    look = -look;
+#else
                 look = -FixedMul(2, joylook);
+#endif
             }
             else
             {
