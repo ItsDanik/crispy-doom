@@ -40,6 +40,10 @@
 
 #include "crispy.h"
 
+#ifdef MISTER_HYBRID
+#include "mister/mister_port.h"
+#endif
+
 // The complete set of data for a particular tic.
 
 typedef struct
@@ -126,6 +130,23 @@ static int player_class;
 static int GetAdjustedTime(void)
 {
     int time_ms;
+
+#ifdef MISTER_HYBRID
+    // The tics from the same microseconds as I_GetTime(): through whole
+    // milliseconds a tic began up to 1ms later here, in a field about once
+    // a second, and its ticcmd was built a frame late (the view's turn,
+    // localview, jumped a tic ahead and then stood still)
+    uint64_t us;
+
+    if (MiSTer_TimeUS(&us))
+    {
+        int64_t t = (int64_t)us;
+
+        if (new_sync)
+            t += (int64_t)(offsetms / FRACUNIT) * 1000;
+        return (int)(t * TICRATE / 1000000);
+    }
+#endif
 
     time_ms = I_GetTimeMS();
 

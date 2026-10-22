@@ -262,7 +262,7 @@ static void StartProgram(int program, const char *dir, char **argv)
 
 int MiSTer_GameArgs(int *argc, char ***argv)
 {
-    char text[MH_MSG_COLS + 1], dir[1024];
+    char dir[1024];
     char **args, *extra, *arg;
     const char *handed;
     int pick = -1, n = 0, extras = 0, program, g;
@@ -291,10 +291,9 @@ int MiSTer_GameArgs(int *argc, char ***argv)
         StartProgram(Setups[pick].program, dir, *argv);
         return 0;
     }
-    if (MH_IsOpen()) {
-        snprintf(text, sizeof(text), "Loading %s...", Games[pick].name);
-        MH_UI_Message(TITLE, text, 0);
-    }
+    // the game's logo and its lines, "Loading <name>..." the last, came
+    // with the pick (MH_GameLogo(), host version 17), and went over to this
+    // program with it when the other one started it
 
     // MISTER_CRISPY_ARGS: more of the game's options, for tests ("-warp 29", or "-warp,29")
     extra = getenv("MISTER_CRISPY_ARGS");
