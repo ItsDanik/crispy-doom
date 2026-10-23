@@ -348,14 +348,9 @@ static int midi_state[MIDI_CHANNELS_PER_TRACK][arrlen(midi_state_cc) + 2];
 
 // What is sent before a song's first event (the notes' reset, the channels'
 // settings) reaches an MT32-pi at 31250 baud, 320us a byte, and the song
-// waits for it (MidiLeadDelay()): its first notes went out behind those
-// bytes and their ends nearly on time, and were cut short (a player's
-// report, 2026-10-23; 470 bytes at a new level, 150ms). MH_MidiReset() is
-// three controllers on each of the 16 channels.
-#define MIDI_BYTE_US 320
-#define MIDI_RESET_BYTES (16 * 3 * 3)
-static unsigned int midi_lead_bytes;
-static uint64_t midi_lead_us;  // OPL_MiSTerTime(): they go out as it runs
+// waits for it (MidiLeadDelay(), the library's MH_MidiBacklog()): its first
+// notes went out behind those bytes and their ends nearly on time, and were
+// cut short (a player's report, 2026-10-23; 470 bytes at a new level, 150ms).
 // StopSong() has reset the notes, and nothing went out since
 static boolean midi_stopped;
 // The music went to MIDI: the library counts that as a change of synth
@@ -1399,29 +1394,14 @@ static void MidiStateEvent(midi_event_t *event)
     }
 }
 
-// Bytes on their way to the MT32-pi: those sent before, less what went out
-// since, and `bytes` more
-static void MidiLead(unsigned int bytes)
+// How long a song starting now (at audio frame `ahead` of the next block)
+// waits for the bytes still on their way to the MT32-pi; 0 with the
+// synthesizer
+static uint64_t MidiLeadDelay(int ahead)
 {
-    uint64_t now = OPL_MiSTerTime();
-    uint64_t sent = (now - midi_lead_us) / MIDI_BYTE_US;
+    int frames = MH_MidiBacklog() - ahead;
 
-    midi_lead_bytes = sent >= midi_lead_bytes ? 0 : midi_lead_bytes - sent;
-    midi_lead_bytes += bytes;
-    midi_lead_us = now;
-}
-
-// How long a song starting now waits for them
-static uint64_t MidiLeadDelay(void)
-{
-    MidiLead(0);
-    return (uint64_t) midi_lead_bytes * MIDI_BYTE_US;
-}
-
-static void MidiLeadEvent(int ahead, unsigned int status, int data1, int data2)
-{
-    MH_MidiEvent(ahead, status, data1, data2);
-    MidiLead((status & 0xe0) == MIDI_EVENT_PROGRAM_CHANGE ? 2 : 3);
+    return frames > 0 ? (uint64_t) frames * 1000000 / MH_AUDIO_RATE : 0;
 }
 
 // The MT32-pi is told what the song has set so far: after a reset of all
@@ -1439,31 +1419,29 @@ static void MidiStateSend(int ahead, boolean full)
         if (!midi_stopped)
         {
             MH_MidiReset(ahead);
-            MidiLead(MIDI_RESET_BYTES);
         }
         MH_MidiSysEx(ahead, gm_on, sizeof(gm_on));
-        MidiLead(sizeof(gm_on) + 2);
     }
     midi_stopped = false;
     for (ch = 0; ch < MIDI_CHANNELS_PER_TRACK; ++ch)
     {
         state = midi_state[ch];
         // DMX's start: volume 100, the middle (InitChannel())
-        MidiLeadEvent(ahead, MIDI_EVENT_CONTROLLER | ch, MIDI_CONTROLLER_VOLUME_MSB,
+        MH_MidiEvent(ahead, MIDI_EVENT_CONTROLLER | ch, MIDI_CONTROLLER_VOLUME_MSB,
                       state[2] >= 0 ? state[2] : 100);
-        MidiLeadEvent(ahead, MIDI_EVENT_CONTROLLER | ch, MIDI_CONTROLLER_PAN,
+        MH_MidiEvent(ahead, MIDI_EVENT_CONTROLLER | ch, MIDI_CONTROLLER_PAN,
                       state[3] >= 0 ? state[3] : 64);
         for (i = 0; i < arrlen(midi_state_cc); ++i)
         {
             if (state[i] >= 0 && i != 2 && i != 3)
             {
-                MidiLeadEvent(ahead, MIDI_EVENT_CONTROLLER | ch, midi_state_cc[i], state[i]);
+                MH_MidiEvent(ahead, MIDI_EVENT_CONTROLLER | ch, midi_state_cc[i], state[i]);
             }
         }
-        MidiLeadEvent(ahead, MIDI_EVENT_PROGRAM_CHANGE | ch,
+        MH_MidiEvent(ahead, MIDI_EVENT_PROGRAM_CHANGE | ch,
                       state[arrlen(midi_state_cc)] >= 0 ? state[arrlen(midi_state_cc)] : 0, 0);
         bend = state[arrlen(midi_state_cc) + 1] >= 0 ? state[arrlen(midi_state_cc) + 1] : 0x2000;
-        MidiLeadEvent(ahead, MIDI_EVENT_PITCH_BEND | ch, bend & 0x7f, bend >> 7);
+        MH_MidiEvent(ahead, MIDI_EVENT_PITCH_BEND | ch, bend & 0x7f, bend >> 7);
     }
 }
 
@@ -1482,19 +1460,19 @@ static void MidiStateRestart(int ahead)
         // modulation, expression, sustain and the bend
         if (state[1] >= 0 || state[4] >= 0 || state[5] >= 0 || (bend >= 0 && bend != 0x2000))
         {
-            MidiLeadEvent(ahead, MIDI_EVENT_CONTROLLER | ch, MIDI_CONTROLLER_RESET_ALL_CTRLS, 0);
+            MH_MidiEvent(ahead, MIDI_EVENT_CONTROLLER | ch, MIDI_CONTROLLER_RESET_ALL_CTRLS, 0);
         }
         if (state[2] >= 0 && state[2] != 100)
         {
-            MidiLeadEvent(ahead, MIDI_EVENT_CONTROLLER | ch, MIDI_CONTROLLER_VOLUME_MSB, 100);
+            MH_MidiEvent(ahead, MIDI_EVENT_CONTROLLER | ch, MIDI_CONTROLLER_VOLUME_MSB, 100);
         }
         if (state[3] >= 0 && state[3] != 64)
         {
-            MidiLeadEvent(ahead, MIDI_EVENT_CONTROLLER | ch, MIDI_CONTROLLER_PAN, 64);
+            MH_MidiEvent(ahead, MIDI_EVENT_CONTROLLER | ch, MIDI_CONTROLLER_PAN, 64);
         }
         if (state[arrlen(midi_state_cc)] > 0)
         {
-            MidiLeadEvent(ahead, MIDI_EVENT_PROGRAM_CHANGE | ch, 0, 0);
+            MH_MidiEvent(ahead, MIDI_EVENT_PROGRAM_CHANGE | ch, 0, 0);
         }
     }
 }
@@ -1663,7 +1641,7 @@ static void RestartSong(void *unused)
     if (midi_out)
     {
         MidiStateRestart(OPL_MiSTerAhead());
-        song_lead_us = MidiLeadDelay();
+        song_lead_us = MidiLeadDelay(OPL_MiSTerAhead());
     }
     MidiStateReset();
 #endif
@@ -1825,7 +1803,7 @@ static void I_OPL_PlaySong(void *handle, boolean looping)
         {
             MidiStateSend(0, true);
         }
-        song_lead_us = MidiLeadDelay();
+        song_lead_us = MidiLeadDelay(0);
     }
 #endif
 
@@ -1928,7 +1906,6 @@ static void I_OPL_StopSong(void)
     if (midi_out)
     {
         MH_MidiReset(0);
-        MidiLead(MIDI_RESET_BYTES);
         midi_stopped = true;
     }
 #endif
