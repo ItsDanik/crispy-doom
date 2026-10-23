@@ -41,6 +41,10 @@
 #include "m_misc.h" // [crispy] M_StringDuplicate()
 #include "m_random.h" // [crispy] Crispy_Random()
 #include "d_pwad.h" // [crispy] kex secret level
+#ifdef MISTER_HYBRID
+#include "i_joystick.h"
+#include "mister/mister_port.h"
+#endif
 
 typedef enum
 {
@@ -201,8 +205,16 @@ void F_Ticker (void)
     size_t		i;
     
     // check for skipping
+#ifdef MISTER_HYBRID
+    // not in the cast itself: the pad's Fire and Use are ticcmd buttons,
+    // which started it again at every tic they were held
+    if ( (gamemode == commercial)
+      && ( finalecount > 50)
+      && finalestage != F_STAGE_CAST )
+#else
     if ( (gamemode == commercial)
       && ( finalecount > 50) )
+#endif
     {
       // go on to the next level
       for (i=0 ; i<MAXPLAYERS ; i++)
@@ -692,6 +704,38 @@ void F_CastTicker (void)
 boolean F_CastResponder (event_t* ev)
 {
     boolean xdeath = false;
+#ifdef MISTER_HYBRID
+    // the pad as the keys: Fire, Use and Menu OK kill the monster, Run gibs
+    // it, the weapon buttons skip through the cast and the d-pad turns it
+    static int dpad;
+    event_t key;
+
+    if (ev->type == ev_joystick)
+    {
+        int pressed = JOY_GET_DPAD(ev->data6) & ~dpad;
+
+        dpad = JOY_GET_DPAD(ev->data6);
+        key.type = ev_keydown;
+        key.data1 = -1;
+        if (pressed & JOY_DIR_LEFT)
+            key.data1 = key_left;
+        else if (pressed & JOY_DIR_RIGHT)
+            key.data1 = key_right;
+        else if (mister_joy_pressed & (1u << MISTER_JOY_PREV_WEAPON))
+            key.data1 = key_strafeleft;
+        else if (mister_joy_pressed & (1u << MISTER_JOY_NEXT_WEAPON))
+            key.data1 = key_straferight;
+        else if (mister_joy_pressed & (1u << MISTER_JOY_RUN))
+            key.data1 = key_speed;
+        else if (mister_joy_pressed & ((1u << MISTER_JOY_FIRE) |
+                                       (1u << MISTER_JOY_USE) |
+                                       MISTER_JOY_OK_MASK))
+            key.data1 = key_use;
+        if (key.data1 == -1)
+            return false;
+        ev = &key;
+    }
+#endif
 
     if (ev->type != ev_keydown)
 	return false;
