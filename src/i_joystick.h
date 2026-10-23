@@ -98,6 +98,18 @@ enum
     MISTER_DPAD_MISSION = 8,   // up shows the mission objectives while held,
                                // as key_mission does (Strife)
 };
+// the look of the right stick (joylook, -FRACUNIT up..FRACUNIT down, after
+// the sensitivity) for a ticcmd: 2 a tic at full tilt, the fraction carried
+// over to the next tic
+int MiSTer_LookStep(int joylook);
+#endif
+
+// the joystick sensitivities are tenths; on the MiSTer the OSD's percentages
+// (MiSTer_Sensitivity()), 150 the speed of 10
+#ifdef MISTER_HYBRID
+#define JOYSTICK_SENSITIVITY_UNIT 150
+#else
+#define JOYSTICK_SENSITIVITY_UNIT 10
 #endif
 
 // 4-way direction data for gamepad directional inputs.

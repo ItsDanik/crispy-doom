@@ -49,10 +49,17 @@ enum {
     MISTER_OSD_NOCLIP = 33,
     MISTER_OSD_INFINITE_AMMO = 34,
     MISTER_OSD_BUDDHA = 35,
-    MISTER_OSD_NOTARGET = 36
+    MISTER_OSD_NOTARGET = 36,
+    // the right stick's sensitivities, 3 bits each
+    MISTER_OSD_TURN = 37,
+    MISTER_OSD_LOOK = 40
 };
 // 1 while the option is on, 0 without the core
 int MiSTer_Option(int bit);
+// Turn Sensitivity or Look Sensitivity (MISTER_OSD_TURN, MISTER_OSD_LOOK): a
+// percentage, 25..200, 150 the speed up to release 20261023 and without the
+// core (JOYSTICK_SENSITIVITY_UNIT)
+int MiSTer_Sensitivity(int bit);
 // The Cheats page's triggers selected since the last call (MH_OSDTriggers()):
 // call it from one place, every tic
 enum {
@@ -110,6 +117,8 @@ void MiSTer_RumbleLand(int momz);
 void MiSTer_HudRows(int height, int *top, int *bottom);
 // The OSD's HUD margins are greyed out in 320x200, which has none
 void MiSTer_ShowHudOptions(int shown);
+// Look Sensitivity is greyed out in a game whose look is digital (Strife)
+void MiSTer_DigitalLook(void);
 
 // Problems the player can fix (missing data): shown under the core's logo
 // until the player leaves the core, in plain words that say which files go

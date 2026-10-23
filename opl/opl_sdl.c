@@ -229,6 +229,18 @@ int OPL_MiSTerAhead(void)
 {
     return SDL_ThreadID() == fm_audio_thread ? fm_ahead : 0;
 }
+
+// The time the music is at, in microseconds: it stands still while no audio
+// is made
+uint64_t OPL_MiSTerTime(void)
+{
+    uint64_t now;
+
+    SDL_LockMutex(callback_mutex);
+    now = current_time;
+    SDL_UnlockMutex(callback_mutex);
+    return now;
+}
 #endif
 
 // Call the OPL emulator code to fill the specified buffer.

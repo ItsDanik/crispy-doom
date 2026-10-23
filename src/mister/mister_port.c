@@ -387,6 +387,14 @@ int MiSTer_Option(int bit)
     return MH_IsOpen() && MH_OSD_GAME_BITS(MH_OSDStatus(), bit, 1);
 }
 
+int MiSTer_Sensitivity(int bit)
+{
+    // the OSD lists them from the default, 100%: 100..200, then 25..75
+    if (!MH_IsOpen())
+        return 150;
+    return 25 * ((MH_OSD_GAME_BITS(MH_OSDStatus(), bit, 3) + 3) % 8 + 1);
+}
+
 int MiSTer_Triggers(void)
 {
     return MH_IsOpen() ? MH_OSDTriggers() : 0;
@@ -526,10 +534,21 @@ void MiSTer_HudRows(int height, int *top, int *bottom)
     *bottom = height - b * scale;
 }
 
+// "D0" of the HUD lines in CONF_STR, "D1" of Look Sensitivity
+static int MenuMask;
+
 void MiSTer_ShowHudOptions(int shown)
 {
+    MenuMask = (MenuMask & ~1) | (shown ? 0 : 1);
     if (MH_IsOpen())
-        MH_SetMenuMask(shown ? 0 : 1); // "D0" of the HUD lines in CONF_STR
+        MH_SetMenuMask(MenuMask);
+}
+
+void MiSTer_DigitalLook(void)
+{
+    MenuMask |= 2;
+    if (MH_IsOpen())
+        MH_SetMenuMask(MenuMask);
 }
 
 void MiSTer_ShowError(const char *message)

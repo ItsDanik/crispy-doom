@@ -645,12 +645,33 @@ static boolean MiSTer_OpenJoystick(void)
     return true;
 }
 
+int MiSTer_LookStep(int joylook)
+{
+    // in 1/FRACUNIT steps; a fraction left from the other way is dropped
+    static int carried;
+    int look;
+
+    if ((carried < 0) != (joylook > 0))
+    {
+        carried = 0;
+    }
+    carried -= 2 * joylook;
+    look = carried / FRACUNIT;
+    carried -= look * FRACUNIT;
+    return look;
+}
+
 static void MiSTer_UpdateJoystick(void)
 {
     static unsigned int held;
     unsigned int buttons = 0;
     event_t ev;
     int hat, i;
+
+    // the OSD's Turn Sensitivity and Look Sensitivity; the move's is the
+    // game's
+    joystick_turn_sensitivity = MiSTer_Sensitivity(MISTER_OSD_TURN);
+    joystick_look_sensitivity = MiSTer_Sensitivity(MISTER_OSD_LOOK);
 
     for (i = 0; i < 32; i++)
     {

@@ -616,7 +616,7 @@ void G_BuildTiccmd (ticcmd_t* cmd, int maketic)
             // Cubic response curve allows for finer control when stick
             // deflection is small.
             joyxmove = FixedMul(FixedMul(joyxmove, joyxmove), joyxmove);
-            joyxmove = joyxmove * joystick_turn_sensitivity / 10;
+            joyxmove = joyxmove * joystick_turn_sensitivity / JOYSTICK_SENSITIVITY_UNIT;
             angle -= FixedMul(angleturn[1], joyxmove);
         }
         else if (joystick_turn_sensitivity)
@@ -702,16 +702,15 @@ void G_BuildTiccmd (ticcmd_t* cmd, int maketic)
         {
             if (use_analog)
             {
-                joylook = joylook * joystick_look_sensitivity / 10;
+                joylook = joylook * joystick_look_sensitivity / JOYSTICK_SENSITIVITY_UNIT;
                 joylook = BETWEEN(-FRACUNIT, FRACUNIT, joylook);
 #ifdef MISTER_HYBRID
                 // [MiSTer] as far down as up: FixedMul() rounds towards minus
                 // infinity and the stick reaches -FRACUNIT up but FRACUNIT - 2
                 // down, so a full tilt looked up 2 a tic and down 1, and down
-                // not at all below half; up as before, down the same
-                look = (2 * (joylook < 0 ? -joylook : joylook) + FRACUNIT - 1) >> FRACBITS;
-                if (joylook > 0)
-                    look = -look;
+                // not at all below half. The fraction carried over, so that
+                // Look Sensitivity is the speed at every tilt
+                look = MiSTer_LookStep(joylook);
 #else
                 look = -FixedMul(2, joylook);
 #endif

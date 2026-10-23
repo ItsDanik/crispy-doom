@@ -649,7 +649,7 @@ void G_BuildTiccmd (ticcmd_t* cmd, int maketic)
             // Cubic response curve allows for finer control when stick
             // deflection is small.
             joyxmove = FixedMul(FixedMul(joyxmove, joyxmove), joyxmove);
-            joyxmove = joyxmove * joystick_turn_sensitivity / 10;
+            joyxmove = joyxmove * joystick_turn_sensitivity / JOYSTICK_SENSITIVITY_UNIT;
             angle -= FixedMul(angleturn[1], joyxmove);
         }
         else if (joystick_turn_sensitivity)

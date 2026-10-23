@@ -345,6 +345,28 @@ static opl_channel_data_t channels[MIDI_CHANNELS_PER_TRACK];
 static boolean midi_out;
 static const byte midi_state_cc[] = { 0, 1, 7, 10, 11, 64, 91, 93 };
 static int midi_state[MIDI_CHANNELS_PER_TRACK][arrlen(midi_state_cc) + 2];
+
+// What is sent before a song's first event (the notes' reset, the channels'
+// settings) reaches an MT32-pi at 31250 baud, 320us a byte, and the song
+// waits for it (MidiLeadDelay()): its first notes went out behind those
+// bytes and their ends nearly on time, and were cut short (a player's
+// report, 2026-10-23; 470 bytes at a new level, 150ms). MH_MidiReset() is
+// three controllers on each of the 16 channels.
+#define MIDI_BYTE_US 320
+#define MIDI_RESET_BYTES (16 * 3 * 3)
+static unsigned int midi_lead_bytes;
+static uint64_t midi_lead_us;  // OPL_MiSTerTime(): they go out as it runs
+// StopSong() has reset the notes, and nothing went out since
+static boolean midi_stopped;
+// The music went to MIDI: the library counts that as a change of synth
+// (MH_MidiSynthChanged()) at the end of the next audio block, after the
+// settings went out, which then went out again among the first notes. The
+// first change after it is its own, unless 100ms went by without one (the
+// library had counted it before).
+static boolean midi_switching;
+static uint64_t midi_switched_us;
+// added to the first event of every track (ScheduleTrack())
+static uint64_t song_lead_us;
 #endif
 
 // Track data for playing tracks:
@@ -1377,9 +1399,34 @@ static void MidiStateEvent(midi_event_t *event)
     }
 }
 
+// Bytes on their way to the MT32-pi: those sent before, less what went out
+// since, and `bytes` more
+static void MidiLead(unsigned int bytes)
+{
+    uint64_t now = OPL_MiSTerTime();
+    uint64_t sent = (now - midi_lead_us) / MIDI_BYTE_US;
+
+    midi_lead_bytes = sent >= midi_lead_bytes ? 0 : midi_lead_bytes - sent;
+    midi_lead_bytes += bytes;
+    midi_lead_us = now;
+}
+
+// How long a song starting now waits for them
+static uint64_t MidiLeadDelay(void)
+{
+    MidiLead(0);
+    return (uint64_t) midi_lead_bytes * MIDI_BYTE_US;
+}
+
+static void MidiLeadEvent(int ahead, unsigned int status, int data1, int data2)
+{
+    MH_MidiEvent(ahead, status, data1, data2);
+    MidiLead((status & 0xe0) == MIDI_EVENT_PROGRAM_CHANGE ? 2 : 3);
+}
+
 // The MT32-pi is told what the song has set so far: after a reset of all
-// its sound (`full`, a new song or the switch to it), or with the notes
-// left to end (the song starting over)
+// its sound (`full`, a new song or the switch to it; a new song after
+// StopSong()'s reset needs no second one)
 static void MidiStateSend(int ahead, boolean full)
 {
     // General MIDI on: whatever ran before on the Pi
@@ -1389,39 +1436,73 @@ static void MidiStateSend(int ahead, boolean full)
 
     if (full)
     {
-        MH_MidiReset(ahead);
+        if (!midi_stopped)
+        {
+            MH_MidiReset(ahead);
+            MidiLead(MIDI_RESET_BYTES);
+        }
         MH_MidiSysEx(ahead, gm_on, sizeof(gm_on));
+        MidiLead(sizeof(gm_on) + 2);
     }
+    midi_stopped = false;
     for (ch = 0; ch < MIDI_CHANNELS_PER_TRACK; ++ch)
     {
         state = midi_state[ch];
-        if (!full)
-        {
-            MH_MidiEvent(ahead, MIDI_EVENT_CONTROLLER | ch, MIDI_CONTROLLER_RESET_ALL_CTRLS, 0);
-        }
         // DMX's start: volume 100, the middle (InitChannel())
-        MH_MidiEvent(ahead, MIDI_EVENT_CONTROLLER | ch, MIDI_CONTROLLER_VOLUME_MSB,
-                     state[2] >= 0 ? state[2] : 100);
-        MH_MidiEvent(ahead, MIDI_EVENT_CONTROLLER | ch, MIDI_CONTROLLER_PAN,
-                     state[3] >= 0 ? state[3] : 64);
+        MidiLeadEvent(ahead, MIDI_EVENT_CONTROLLER | ch, MIDI_CONTROLLER_VOLUME_MSB,
+                      state[2] >= 0 ? state[2] : 100);
+        MidiLeadEvent(ahead, MIDI_EVENT_CONTROLLER | ch, MIDI_CONTROLLER_PAN,
+                      state[3] >= 0 ? state[3] : 64);
         for (i = 0; i < arrlen(midi_state_cc); ++i)
         {
             if (state[i] >= 0 && i != 2 && i != 3)
             {
-                MH_MidiEvent(ahead, MIDI_EVENT_CONTROLLER | ch, midi_state_cc[i], state[i]);
+                MidiLeadEvent(ahead, MIDI_EVENT_CONTROLLER | ch, midi_state_cc[i], state[i]);
             }
         }
-        MH_MidiEvent(ahead, MIDI_EVENT_PROGRAM_CHANGE | ch,
-                     state[arrlen(midi_state_cc)] >= 0 ? state[arrlen(midi_state_cc)] : 0, 0);
+        MidiLeadEvent(ahead, MIDI_EVENT_PROGRAM_CHANGE | ch,
+                      state[arrlen(midi_state_cc)] >= 0 ? state[arrlen(midi_state_cc)] : 0, 0);
         bend = state[arrlen(midi_state_cc) + 1] >= 0 ? state[arrlen(midi_state_cc) + 1] : 0x2000;
-        MH_MidiEvent(ahead, MIDI_EVENT_PITCH_BEND | ch, bend & 0x7f, bend >> 7);
+        MidiLeadEvent(ahead, MIDI_EVENT_PITCH_BEND | ch, bend & 0x7f, bend >> 7);
+    }
+}
+
+// The song starting over: each channel back to DMX's start, where the song
+// moved it from there (the notes left to end). Only that, or every channel's
+// settings went out before the song's first notes again.
+static void MidiStateRestart(int ahead)
+{
+    unsigned int ch;
+    int *state, bend;
+
+    for (ch = 0; ch < MIDI_CHANNELS_PER_TRACK; ++ch)
+    {
+        state = midi_state[ch];
+        bend = state[arrlen(midi_state_cc) + 1];
+        // modulation, expression, sustain and the bend
+        if (state[1] >= 0 || state[4] >= 0 || state[5] >= 0 || (bend >= 0 && bend != 0x2000))
+        {
+            MidiLeadEvent(ahead, MIDI_EVENT_CONTROLLER | ch, MIDI_CONTROLLER_RESET_ALL_CTRLS, 0);
+        }
+        if (state[2] >= 0 && state[2] != 100)
+        {
+            MidiLeadEvent(ahead, MIDI_EVENT_CONTROLLER | ch, MIDI_CONTROLLER_VOLUME_MSB, 100);
+        }
+        if (state[3] >= 0 && state[3] != 64)
+        {
+            MidiLeadEvent(ahead, MIDI_EVENT_CONTROLLER | ch, MIDI_CONTROLLER_PAN, 64);
+        }
+        if (state[arrlen(midi_state_cc)] > 0)
+        {
+            MidiLeadEvent(ahead, MIDI_EVENT_PROGRAM_CHANGE | ch, 0, 0);
+        }
     }
 }
 
 // Where the music goes, as the OSD and the MT32-pi say
 static void MidiOutFollow(void)
 {
-    boolean want;
+    boolean want, changed;
     unsigned int i;
 
     if (!MH_MidiAvailable())
@@ -1435,8 +1516,15 @@ static void MidiOutFollow(void)
     {
         // the Pi switched synth or SoundFont, or its notes were reset: it
         // has none of the song's settings
-        if (want && MH_MidiSynthChanged())
+        changed = want && MH_MidiSynthChanged();
+        if (midi_switching)
         {
+            midi_switching = !changed && OPL_MiSTerTime() - midi_switched_us < 100 * OPL_MS;
+            changed = false;
+        }
+        if (changed)
+        {
+            midi_stopped = false;
             MidiStateSend(OPL_MiSTerAhead(), true);
         }
         return;
@@ -1449,12 +1537,16 @@ static void MidiOutFollow(void)
             AllNotesOff(&channels[i], 0);
         }
         MH_MidiSynthChanged();
+        midi_switching = true;
+        midi_switched_us = OPL_MiSTerTime();
+        midi_stopped = false;
         MidiStateSend(OPL_MiSTerAhead(), true);
     }
     else
     {
         MH_MidiReset(OPL_MiSTerAhead());
     }
+    midi_stopped = false;
     midi_out = want;
 }
 
@@ -1566,24 +1658,30 @@ static void RestartSong(void *unused)
 
     start_music_volume = current_music_volume;
 
+#ifdef MISTER_HYBRID
+    // before the tracks: they wait for it
+    if (midi_out)
+    {
+        MidiStateRestart(OPL_MiSTerAhead());
+        song_lead_us = MidiLeadDelay();
+    }
+    MidiStateReset();
+#endif
+
     for (i = 0; i < num_tracks; ++i)
     {
         MIDI_RestartIterator(tracks[i].iter);
         ScheduleTrack(&tracks[i]);
     }
 
+#ifdef MISTER_HYBRID
+    song_lead_us = 0;
+#endif
+
     for (i = 0; i < MIDI_CHANNELS_PER_TRACK; ++i)
     {
         InitChannel(&channels[i]);
     }
-
-#ifdef MISTER_HYBRID
-    MidiStateReset();
-    if (midi_out)
-    {
-        MidiStateSend(OPL_MiSTerAhead(), false);
-    }
-#endif
 }
 
 // Callback function invoked when another event needs to be read from
@@ -1639,6 +1737,9 @@ static void ScheduleTrack(opl_track_data_t *track)
 
     nticks = MIDI_GetDeltaTime(track->iter);
     us = ((uint64_t) nticks * us_per_beat) / ticks_per_beat;
+#ifdef MISTER_HYBRID
+    us += song_lead_us;
+#endif
 
     // Set a timer to be invoked when the next event is
     // ready to play.
@@ -1683,6 +1784,9 @@ static void I_OPL_PlaySong(void *handle, boolean looping)
 {
     midi_file_t *file;
     unsigned int i;
+#ifdef MISTER_HYBRID
+    boolean was_out;
+#endif
 
     if (!music_initialized || handle == NULL)
     {
@@ -1708,23 +1812,36 @@ static void I_OPL_PlaySong(void *handle, boolean looping)
 
     start_music_volume = current_music_volume;
 
+#ifdef MISTER_HYBRID
+    // before the tracks: they wait for it. Where the music goes is known
+    // before the first event too, which sends the settings when it changes
+    // (the first song: they went out among its first notes)
+    MidiStateReset();
+    was_out = midi_out;
+    MidiOutFollow();
+    if (midi_out)
+    {
+        if (was_out)
+        {
+            MidiStateSend(0, true);
+        }
+        song_lead_us = MidiLeadDelay();
+    }
+#endif
+
     for (i = 0; i < num_tracks; ++i)
     {
         StartTrack(file, i);
     }
 
+#ifdef MISTER_HYBRID
+    song_lead_us = 0;
+#endif
+
     for (i = 0; i < MIDI_CHANNELS_PER_TRACK; ++i)
     {
         InitChannel(&channels[i]);
     }
-
-#ifdef MISTER_HYBRID
-    MidiStateReset();
-    if (midi_out)
-    {
-        MidiStateSend(0, true);
-    }
-#endif
 
     // If the music was previously paused, it needs to be unpaused; playing
     // a new song implies that we turn off pause. This matches vanilla
@@ -1811,6 +1928,8 @@ static void I_OPL_StopSong(void)
     if (midi_out)
     {
         MH_MidiReset(0);
+        MidiLead(MIDI_RESET_BYTES);
+        midi_stopped = true;
     }
 #endif
 

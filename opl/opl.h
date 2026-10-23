@@ -135,6 +135,9 @@ void OPL_ClearCallbacks(void);
 #ifdef MISTER_HYBRID
 // MiSTer: the audio frame of the next block an OPL callback is at
 int OPL_MiSTerAhead(void);
+// MiSTer: the music's time in microseconds, which stands still while no
+// audio is made
+uint64_t OPL_MiSTerTime(void);
 #endif
 
 // Begin critical section, during which, OPL callbacks will not be
