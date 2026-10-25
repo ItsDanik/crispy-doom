@@ -523,7 +523,7 @@ static int DeviceIndex(void)
 // menu); R2 fires and L2 runs as well; the left stick moves and strafes, the
 // right one turns (and looks up and down with freelook); the d-pad moves and
 // turns, in Heretic, Hexen and Strife it moves in the inventory (left,
-// right), uses the item (down) and flies up, L2 down (Heretic, Hexen) or
+// right), uses the item (down) and flies up, Run down (Heretic, Hexen) or
 // shows the mission objectives (Strife); Prev Weapon jumps in Hexen and
 // Strife (mister_dpad_actions). The game's own joystick settings are not
 // used.
@@ -532,6 +532,15 @@ static int DeviceIndex(void)
 // every tic): the menus take presses, not held buttons
 unsigned int mister_joy_pressed;
 int mister_dpad_actions;
+// Buttons held at the last poll, and those of them held when a menu last took
+// a press (MiSTer_MenuTookPad()), which the game does not see until they are
+// let go
+static unsigned int mister_joy_held, mister_joy_taken;
+
+void MiSTer_MenuTookPad(void)
+{
+    mister_joy_taken = mister_joy_held;
+}
 
 #define MISTER_DEAD_ZONE (15 * 32768 / 100)
 #define MISTER_DIR_ZONE (50 * 32768 / 100)
@@ -595,7 +604,7 @@ static void MiSTer_InitJoystick(void)
     joybstrafeleft = -1;
     joybstraferight = -1;
     joybjump = -1;
-    // Heretic, Hexen, Strife: the d-pad for the inventory, flying up (L2
+    // Heretic, Hexen, Strife: the d-pad for the inventory, flying up (Run
     // down) and jumping
     if (mister_dpad_actions & MISTER_DPAD_INVENTORY)
     {
@@ -606,8 +615,15 @@ static void MiSTer_InitJoystick(void)
     if (mister_dpad_actions & MISTER_DPAD_FLY)
     {
         joybflyup = MISTER_JOY_DPAD_UP;
-        joybflydown = MISTER_JOY_L2;
         joybflycenter = -1;
+        // L2 runs, as in Doom and Strife, and the Run button (the right face
+        // button) flies down: running is held far more often (a player's
+        // report, 2026-10-25: L2 flew down, only the face button ran)
+        joybflydown = MISTER_JOY_RUN;
+        if (joybspeed < MAX_VIRTUAL_BUTTONS)
+        {
+            joybspeed = MISTER_JOY_L2;
+        }
     }
     if (mister_dpad_actions & MISTER_DPAD_JUMP)
     {
@@ -663,7 +679,6 @@ int MiSTer_LookStep(int joylook)
 
 static void MiSTer_UpdateJoystick(void)
 {
-    static unsigned int held;
     unsigned int buttons = 0;
     event_t ev;
     int hat, i;
@@ -708,23 +723,12 @@ static void MiSTer_UpdateJoystick(void)
                    ((hat & SDL_HAT_RIGHT) ? 1u << MISTER_JOY_DPAD_RIGHT : 0);
     }
 
-    // Strife: d-pad up is the objectives' key, held
-    if (mister_dpad_actions & MISTER_DPAD_MISSION &&
-        (buttons ^ held) & (1u << MISTER_JOY_DPAD_UP))
-    {
-        ev.type = buttons & (1u << MISTER_JOY_DPAD_UP) ? ev_keydown : ev_keyup;
-        ev.data1 = key_mission;
-        ev.data2 = key_mission;
-        ev.data3 = key_mission;
-        ev.data4 = ev.data5 = ev.data6 = 0;
-        D_PostEvent(&ev);
-    }
-
-    mister_joy_pressed = buttons & ~held;
-    held = buttons;
+    mister_joy_pressed = buttons & ~mister_joy_held;
+    mister_joy_held = buttons;
+    mister_joy_taken &= buttons;
 
     ev.type = ev_joystick;
-    ev.data1 = buttons;
+    ev.data1 = buttons & ~mister_joy_taken;
     // turn: the right stick, or the d-pad all the way
     ev.data2 = (hat & SDL_HAT_LEFT) && !mister_dpad_actions ? -FRACUNIT :
                (hat & SDL_HAT_RIGHT) && !mister_dpad_actions ? FRACUNIT : MiSTer_Axis(2);

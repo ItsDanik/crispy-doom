@@ -1000,7 +1000,11 @@ static void DrawMainMenu(void)
     int frame;
 
     frame = (MenuTime / 5) % 7;
+#ifdef MISTER_HYBRID
+    V_DrawPatch(88, 0, W_CacheLumpName(MiSTer_Page("M_HTIC"), PU_CACHE));
+#else
     V_DrawPatch(88, 0, W_CacheLumpName("M_HTIC", PU_CACHE));
+#endif
 // Old Gold skull positions: (40, 10) and (232, 10)
     V_DrawPatch(37, 80, W_CacheLumpNum(MauloBaseLump + (frame + 2) % 7,
                                        PU_CACHE));
@@ -2116,6 +2120,13 @@ boolean MN_Responder(event_t * event)
             {
                 key = key_menu_right;
             }
+            // the saved games' pages, as PgUp and PgDn turn them
+            if ((key == key_menu_left || key == key_menu_right) &&
+                (CurrentMenu == &LoadMenu || CurrentMenu == &SaveMenu) &&
+                !FileMenuKeySteal)
+            {
+                key = key == key_menu_left ? KEY_PGUP : KEY_PGDN;
+            }
             if (key != -1)
             {
                 joywait = I_GetTime() + 5;
@@ -2168,6 +2179,11 @@ boolean MN_Responder(event_t * event)
         {
             // the game has the joystick when the menu does not use it
             return false;
+        }
+        if (mister_joy_pressed)
+        {
+            // the buttons held now are not the game's until they are let go
+            MiSTer_MenuTookPad();
         }
     }
     else
@@ -3125,6 +3141,14 @@ void MN_DrawInfo(void)
             lumpindex = W_GetNumForName("TITLE");
             break;
     }
+#ifdef MISTER_HYBRID
+    // [MiSTer] Deathkings' own pages in its menu entry
+    {
+        static const char *const pages[] = { "TITLE", "HELP1", "HELP2", "CREDIT" };
+
+        lumpindex = W_GetNumForName(MiSTer_Page(pages[InfoType >= 1 && InfoType <= 3 ? InfoType : 0]));
+    }
+#endif
 
     V_DrawFullscreenRawOrPatch(lumpindex);
 

@@ -11,6 +11,7 @@
 #include <unistd.h>
 
 #include "../m_misc.h"
+#include "../w_wad.h"
 
 #define EXIT_TO_MENU 0
 #define EXIT_RESTART 42 // danik_hybrid_launch.sh starts the game again
@@ -345,6 +346,32 @@ int MiSTer_Expansion(void)
     return Picked >= 0 ? Setups[Picked].expansion : MISTER_EXP_NONE;
 }
 
+const char *MiSTer_Page(const char *name)
+{
+    // the expansions' own, which Crispy renamed out of the way as it loaded
+    // their WAD (d_pwad.c of Doom and Hexen): upstream they are episodes of
+    // the IWAD's game, which keeps its pictures
+    static const char *const pages[][3] = {
+        { "nerve", "TITLEPIC", "NERVEPIC" },
+        { "master", "TITLEPIC", "MASTRPIC" },
+        { "hexdd", "TITLE", "TITLED" },
+        { "hexdd", "CREDIT", "CREDITD" },
+        { "hexdd", "HELP1", "HELP1D" },
+        { "hexdd", "HELP2", "HELP2D" },
+        { "hexdd", "M_HTIC", "M_HTICD" },
+    };
+    unsigned i;
+
+    if (Picked < 0)
+        return name;
+    for (i = 0; i < sizeof(pages) / sizeof(*pages); i++) {
+        if (!strcmp(Games[Picked].id, pages[i][0]) && !strcasecmp(name, pages[i][1]) &&
+            W_CheckNumForName(pages[i][2]) >= 0)
+            return pages[i][2];
+    }
+    return name;
+}
+
 static uint64_t NowUS(void)
 {
     struct timespec ts;
@@ -355,24 +382,29 @@ static uint64_t NowUS(void)
 
 int MiSTer_TimeUS(uint64_t *us)
 {
-    static uint32_t base;
+    static uint32_t base, count;
     static int based = 0;
     static uint64_t last, last_at;
+    int alive = MH_CheckAlive() && MH_IsOpen();
+    uint32_t now = alive ? MH_FieldCounter() : 0;
 
     // Once the core is gone (another core loaded) the field counter stands
     // still: the time goes on by the system clock, so that no loop of the
-    // game waits for it for ever, and the next frame quits
-    if (!MH_CheckAlive() || !MH_IsOpen()) {
+    // game waits for it for ever, and the next frame quits. So it does when
+    // the count went back (our core loaded again), which would otherwise
+    // make the time jump 2^32 fields ahead
+    if (!alive || (based && now < count)) {
         if (!based)
             return 0;
         *us = last + (NowUS() - last_at);
         return 1;
     }
     if (!based) {
-        base = MH_FieldCounter();
+        base = count = now;
         based = 1;
     }
-    last = (uint64_t)(uint32_t)(MH_FieldCounter() - base) * FIELD_US;
+    count = now;
+    last = (uint64_t)(uint32_t)(count - base) * FIELD_US;
     last_at = NowUS();
     *us = last;
     return 1;
@@ -534,19 +566,13 @@ void MiSTer_HudRows(int height, int *top, int *bottom)
     *bottom = height - b * scale;
 }
 
-// "D0" of the HUD lines in CONF_STR, "D1" of Look Sensitivity
+// "D0" of the HUD lines in CONF_STR ("D1" of Look Sensitivity is no longer
+// set: Strife's look is analog as well)
 static int MenuMask;
 
 void MiSTer_ShowHudOptions(int shown)
 {
     MenuMask = (MenuMask & ~1) | (shown ? 0 : 1);
-    if (MH_IsOpen())
-        MH_SetMenuMask(MenuMask);
-}
-
-void MiSTer_DigitalLook(void)
-{
-    MenuMask |= 2;
     if (MH_IsOpen())
         MH_SetMenuMask(MenuMask);
 }
@@ -568,4 +594,11 @@ int MiSTer_ExitCode(void)
     if (PickedFromList && MH_Open())
         return EXIT_RESTART;
     return EXIT_TO_MENU;
+}
+
+int MiSTer_ErrorExitCode(void)
+{
+    // as the launch script tells a reload from an error ("The game stopped
+    // unexpectedly (exit code 255)" on the new core's screen)
+    return MH_CoreReloaded() ? EXIT_RELOADED : -1;
 }

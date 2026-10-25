@@ -1381,7 +1381,12 @@ void H2_PageTicker(void)
 
 static void PageDrawer(void)
 {
+#ifdef MISTER_HYBRID
+    // [MiSTer] Deathkings' own title and credits in its menu entry
+    V_DrawFullscreenRawOrPatch(W_GetNumForName(MiSTer_Page(pagename)));
+#else
     V_DrawFullscreenRawOrPatch(W_GetNumForName(pagename)); // [crispy]
+#endif
 
     if (demosequence == 1)
     {

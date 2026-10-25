@@ -364,11 +364,16 @@ void I_Error (const char *error, ...)
         M_snprintf(text, sizeof(text), "Crispy Doom stopped: %s", msgbuf);
         MiSTer_ShowError(text);
     }
-#endif
 
     SDL_Quit();
 
+    // the core loaded again meanwhile: the game starts again
+    exit(MiSTer_ErrorExitCode());
+#else
+    SDL_Quit();
+
     exit(-1);
+#endif
 }
 
 //

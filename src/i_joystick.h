@@ -85,6 +85,11 @@
 #ifdef MISTER_HYBRID
 // buttons pressed at the last poll of the joystick (i_joystick.c)
 extern unsigned int mister_joy_pressed;
+// a menu took a press of the pad (Menu OK, Menu Back, Menu): the buttons held
+// now do nothing in the game until they are let go, or one that also uses,
+// fires or jumps would do it as the menu or the dialogue closes (Strife's
+// talk began again at once)
+void MiSTer_MenuTookPad(void);
 // the d-pad, L2 and Prev Weapon are actions of the game, set before
 // I_InitJoystick(): MISTER_DPAD_* of the game's (0: the d-pad moves and
 // turns, as in Doom)
@@ -96,7 +101,8 @@ enum
     MISTER_DPAD_JUMP = 4,      // Prev Weapon jumps, Next Weapon goes round
                                // the weapons alone (Hexen, Strife)
     MISTER_DPAD_MISSION = 8,   // up shows the mission objectives while held,
-                               // as key_mission does (Strife)
+                               // as key_mission does, outside the menus and
+                               // the dialogues (Strife's G_Responder())
 };
 // the look of the right stick (joylook, -FRACUNIT up..FRACUNIT down, after
 // the sensitivity) for a ticcmd: 2 a tic at full tilt, the fraction carried

@@ -23,7 +23,8 @@ enum {
     MISTER_JOY_CORE_OK,
     MISTER_JOY_CORE_BACK,
     // with mister_dpad_actions (Heretic, Hexen, Strife): the d-pad and L2
-    // as buttons of their own, not moving and running
+    // as buttons of their own, not moving and running (L2 runs again in
+    // Heretic and Hexen, joybspeed, where Run flies down)
     MISTER_JOY_DPAD_UP,
     MISTER_JOY_DPAD_DOWN,
     MISTER_JOY_DPAD_LEFT,
@@ -83,6 +84,10 @@ int MiSTer_Episode(void);
 // entry
 enum { MISTER_EXP_NONE, MISTER_EXP_NERVE, MISTER_EXP_MASTER };
 int MiSTer_Expansion(void);
+// A picture of the game (TITLEPIC, Hexen's TITLE, CREDIT, HELP1, HELP2 and
+// M_HTIC) under the name of the menu entry's expansion's own, where its WAD
+// has one (No Rest for the Living, the Master Levels, Deathkings), else `name`
+const char *MiSTer_Page(const char *name);
 
 // The game's clock while the core is there: microseconds from the core's
 // field counter, so that a frame's time is the field it is shown in. Returns
@@ -117,8 +122,6 @@ void MiSTer_RumbleLand(int momz);
 void MiSTer_HudRows(int height, int *top, int *bottom);
 // The OSD's HUD margins are greyed out in 320x200, which has none
 void MiSTer_ShowHudOptions(int shown);
-// Look Sensitivity is greyed out in a game whose look is digital (Strife)
-void MiSTer_DigitalLook(void);
 
 // Problems the player can fix (missing data): shown under the core's logo
 // until the player leaves the core, in plain words that say which files go
@@ -127,5 +130,8 @@ void MiSTer_ShowError(const char *message);
 // Exit code of the process after the player quit: the launcher starts the
 // game again (back to the list of the games) or returns to the menu
 int MiSTer_ExitCode(void);
+// The same after an error (I_Error()), whose message waited until the player
+// left the core: -1, unless the player loaded the core again
+int MiSTer_ErrorExitCode(void);
 
 #endif

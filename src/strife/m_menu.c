@@ -2443,6 +2443,11 @@ boolean M_Responder (event_t* ev)
             // the game has the joystick when the menu does not use it
             return false;
         }
+        if (mister_joy_pressed)
+        {
+            // the buttons held now are not the game's until they are let go
+            MiSTer_MenuTookPad();
+        }
     }
     else
 #endif

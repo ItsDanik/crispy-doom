@@ -824,6 +824,11 @@ void D_DoAdvanceDemo (void)
 	break;
     }
 
+#ifdef MISTER_HYBRID
+    // [MiSTer] the title of the menu entry's expansion, where it has one
+    pagename = MiSTer_Page(pagename);
+#endif
+
     // The Doom 3: BFG Edition version of doom2.wad does not have a
     // TITLETPIC lump. Use INTERPIC instead as a workaround.
     if (gamevariant == bfgedition && !strcasecmp(pagename, "TITLEPIC")

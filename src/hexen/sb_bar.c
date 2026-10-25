@@ -2035,10 +2035,20 @@ void SB_MiSTerCheats(int triggers)
     {
         AM_MiSTerFullMap();
     }
-    // the map after this one, as the deathmatch timer goes there
+    // the map after this one, as the deathmatch timer goes there. The last
+    // map of Hexen (MAP40) and of Deathkings (MAP60) has the first for its
+    // next, and its cluster's text is not there (CLUS5MSG): the game's end
+    // instead, as Teleport_EndGame there
     if ((triggers & MISTER_TRIGGER_NEXT_LEVEL) && crispy->singleplayer)
     {
-        G_Completed(P_TranslateMap(P_GetMapNextMap(gamemap)), 0);
+        if (P_GetMapNextMap(gamemap) == 1)
+        {
+            G_Completed(-1, -1);
+        }
+        else
+        {
+            G_Completed(P_TranslateMap(P_GetMapNextMap(gamemap)), 0);
+        }
     }
 }
 #endif

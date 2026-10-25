@@ -2420,6 +2420,13 @@ boolean M_Responder (event_t* ev)
                 {
                     key = key_menu_right;
                 }
+                // the saved games' pages, as PgUp and PgDn turn them
+                if ((key == key_menu_left || key == key_menu_right) &&
+                    (currentMenu == &LoadDef || currentMenu == &SaveDef) &&
+                    !messageToPrint && !saveStringEnter)
+                {
+                    key = key == key_menu_left ? KEY_PGUP : KEY_PGDN;
+                }
                 if (key != -1)
                 {
                     joywait = I_GetTime() + 5;
@@ -2474,6 +2481,11 @@ boolean M_Responder (event_t* ev)
         {
             // the game has the joystick when the menu does not use it
             return false;
+        }
+        if (mister_joy_pressed)
+        {
+            // the buttons held now are not the game's until they are let go
+            MiSTer_MenuTookPad();
         }
     }
     else

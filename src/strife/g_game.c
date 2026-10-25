@@ -445,6 +445,7 @@ void G_BuildTiccmd (ticcmd_t* cmd, int maketic)
     static char playermessage[48]; // [crispy]
     static unsigned int mbmlookctrl = 0; // [crispy]
     static unsigned int kbdlookctrl = 0; // [crispy]
+    int joystick_look = joylook; // [MiSTer] 0 when the stick looked itself
 
     // [crispy] For fast polling.
     G_PrepTiccmd();
@@ -454,16 +455,33 @@ void G_BuildTiccmd (ticcmd_t* cmd, int maketic)
     cmd->consistancy = 
         consistancy[consoleplayer][maketic%BACKUPTICS]; 
 
+#ifdef MISTER_HYBRID
+    // [MiSTer] the right stick looks up and down as far as it is pushed, as in
+    // Doom: through the mouse's look, in single player (10 a tic at full tilt,
+    // Look Sensitivity the speed at every tilt). Upstream it is the keys'
+    // look, 6 a tic whatever the tilt, as it still is in a netgame
+    if (joylook && joystick_look_sensitivity && crispy->singleplayer)
+    {
+        const int tilt = BETWEEN(-FRACUNIT, FRACUNIT, joylook *
+            joystick_look_sensitivity / JOYSTICK_SENSITIVITY_UNIT);
+
+        cmd->lookdir += MLOOKUNIT * 5 * MiSTer_LookStep(tilt);
+        if (crispy->freelook_hh == FREELOOK_HH_SPRING)
+            kbdlookctrl += ticdup;
+        joystick_look = 0;
+    }
+#endif
+
     // villsa [STRIFE] look up/down keys
     // [crispy] center view key and lookspring support
     if (crispy->freelook_hh == FREELOOK_HH_SPRING)
     {
-        if (gamekeydown[key_lookup] || (joylook < 0 && joystick_look_sensitivity))
+        if (gamekeydown[key_lookup] || (joystick_look < 0 && joystick_look_sensitivity))
         {
             cmd->buttons2 |= BT2_LOOKUP;
             kbdlookctrl += ticdup;
         }
-        else if (gamekeydown[key_lookdown] || (joylook > 0 && joystick_look_sensitivity))
+        else if (gamekeydown[key_lookdown] || (joystick_look > 0 && joystick_look_sensitivity))
         {
             cmd->buttons2 |= BT2_LOOKDOWN;
             kbdlookctrl += ticdup;
@@ -477,10 +495,10 @@ void G_BuildTiccmd (ticcmd_t* cmd, int maketic)
     }
     else
     {
-        if (gamekeydown[key_lookup] || (joylook < 0 && joystick_look_sensitivity))
+        if (gamekeydown[key_lookup] || (joystick_look < 0 && joystick_look_sensitivity))
             cmd->buttons2 |= BT2_LOOKUP;
 
-        if (gamekeydown[key_lookdown] || (joylook > 0 && joystick_look_sensitivity))
+        if (gamekeydown[key_lookdown] || (joystick_look > 0 && joystick_look_sensitivity))
             cmd->buttons2 |= BT2_LOOKDOWN;
 
         if (gamekeydown[key_lookcenter])
@@ -1166,10 +1184,32 @@ boolean G_Responder (event_t* ev)
             return true; 
         } 
 #endif 
-        if (HU_Responder (ev)) 
-            return true;	// chat ate the event 
-        if (ST_Responder (ev)) 
-            return true;	// status window ate it 
+#ifdef MISTER_HYBRID
+        // the pad's d-pad up is the objectives' key while it is held, but
+        // not in the menus and the dialogues, where it moves up (the popup
+        // came up with it there, and the key's letter jumped to a line)
+        if (ev->type == ev_joystick && mister_dpad_actions & MISTER_DPAD_MISSION)
+        {
+            static boolean mission;
+            const boolean up = (ev->data1 & (1u << MISTER_JOY_DPAD_UP)) &&
+                               !menuactive && !menuindialog;
+
+            if (up != mission)
+            {
+                event_t key;
+
+                mission = up;
+                key.type = up ? ev_keydown : ev_keyup;
+                key.data1 = key.data2 = key.data3 = key_mission;
+                key.data4 = key.data5 = key.data6 = 0;
+                ST_Responder(&key);
+            }
+        }
+#endif
+        if (HU_Responder (ev))
+            return true;	// chat ate the event
+        if (ST_Responder (ev))
+            return true;	// status window ate it
         if (AM_Responder (ev)) 
             return true;	// automap ate it 
     } 

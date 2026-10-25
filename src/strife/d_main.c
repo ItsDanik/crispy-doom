@@ -2332,8 +2332,6 @@ void D_DoomMain (void)
     // the pad: the d-pad for the inventory and the objectives, Prev Weapon
     // jumps
     mister_dpad_actions = MISTER_DPAD_INVENTORY | MISTER_DPAD_JUMP | MISTER_DPAD_MISSION;
-    // its look is up and down at one speed
-    MiSTer_DigitalLook();
 #endif
     I_InitJoystick();
     D_IntroTick(); // [STRIFE]
